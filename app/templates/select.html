@@ -7,8 +7,7 @@
   <button type="submit" name="member_id" value="{{ m['id'] }}" class="free">{{ m['name'] }}</button>
   {% endfor %}
 </form>
-<p class="note">選んだ名前はこの端末が覚える。</p>
 {% else %}
-<p class="empty">名簿が空です。<a href="{{ url_for('members') }}">名簿</a>で参加者を登録する。</p>
+<p class="empty">名簿が空です。</p>
 {% endif %}
 {% endblock %}
