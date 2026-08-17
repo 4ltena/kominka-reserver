@@ -1,0 +1,29 @@
+{% for card in cards %}
+<section class="card {{ card.state }}">
+  <h2>{{ card.title }}ごはん</h2>
+  <p class="state">
+    {% if card.state == 'open' %}受付中 ・ {{ card.closes }}まで
+    {% elif card.state == 'before' %}{{ card.opens }} から
+    {% else %}締切{% endif %}
+  </p>
+  {% if card.state == 'open' %}
+  {% if card.voted %}
+  <p class="btnwrap"><span class="btn voted">いる ✓</span></p>
+  <form method="post" action="{{ url_for('meals_unvote') }}">
+    <input type="hidden" name="date" value="{{ card.day }}">
+    <input type="hidden" name="kind" value="{{ card.kind }}">
+    <button type="submit" class="link">キャンセル</button>
+  </form>
+  {% else %}
+  <form method="post" action="{{ url_for('meals_vote') }}" class="btnwrap">
+    <input type="hidden" name="date" value="{{ card.day }}">
+    <input type="hidden" name="kind" value="{{ card.kind }}">
+    <button type="submit" class="btn">いる</button>
+  </form>
+  {% endif %}
+  {% endif %}
+  <p class="count">いる {{ card.wanted }}人 / 登録 {{ card.registered }}人</p>
+</section>
+{% else %}
+<p class="empty">対象期間外です。</p>
+{% endfor %}

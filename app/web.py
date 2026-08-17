@@ -1,0 +1,306 @@
+"""Flask アプリとルーティング。
+
+操作はすべて通常のフォーム送信で行い、書き込み後は転送して再送信を防ぐ。
+JavaScript を切っていても予約と投票ができる。
+"""
+
+from __future__ import annotations
+
+import secrets
+from datetime import date
+from pathlib import Path
+
+from flask import Flask, flash, g, redirect, render_template, request, url_for
+
+from . import clock, config, db, meals, notify, slots
+from .meals import Meal
+
+COOKIE = "member_id"
+COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+
+MESSAGES = {
+    "slot_taken": "この枠はちょうど埋まりました。",
+    "past": "その枠は始まっています。",
+    "out_of_period": "その日は予約できません。",
+    "not_selectable_date": "その日は予約できません。",
+    "bad_slot": "その枠は選べません。",
+}
+
+
+def _secret_key(db_path: Path) -> str:
+    path = Path(db_path).parent / "secret_key"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(secrets.token_hex(32), encoding="utf-8")
+    return path.read_text(encoding="utf-8").strip()
+
+
+def create_app(config_path=None, db_path=None, start_notifier: bool = True) -> Flask:
+    app = Flask(__name__)
+    db_path = Path(db_path) if db_path else config.DEFAULT_DB_PATH
+    settings = config.load_settings(config_path)
+    app.secret_key = _secret_key(db_path)
+    app.config["DB_PATH"] = db_path
+    app.config["SETTINGS"] = settings
+
+    conn = db.connect(db_path)
+    db.init_schema(conn)
+    conn.close()
+
+    if start_notifier:
+        notify.start_worker(db_path, settings)
+
+    @app.before_request
+    def _open_db():
+        g.conn = db.connect(app.config["DB_PATH"])
+
+    @app.teardown_request
+    def _close_db(exc):
+        conn = g.pop("conn", None)
+        if conn is not None:
+            conn.close()
+
+    @app.context_processor
+    def _inject():
+        return {"member": current_member(), "config": config}
+
+    # --- 補助 -------------------------------------------------------------
+
+    def current_member():
+        raw = request.cookies.get(COOKIE)
+        if not raw or not raw.isdigit():
+            return None
+        return db.get_member(g.conn, int(raw))
+
+    def parse_date(raw: str | None) -> date | None:
+        if not raw:
+            return None
+        try:
+            return date.fromisoformat(raw)
+        except ValueError:
+            return None
+
+    def default_bath_date(now) -> date:
+        selectable = slots.selectable_dates(now)
+        return selectable[0] if selectable else now.date()
+
+    def bath_context(day: date, now, member):
+        reserved = db.reservations_for_date(g.conn, day.isoformat())
+        sections = []
+        for section in slots.sections_for_date(day):
+            rows = []
+            for slot in slots.slot_starts(section):
+                cells = []
+                for room in config.ROOMS:
+                    row = reserved.get((room, slot))
+                    if row is None:
+                        started = slots.slot_datetime(day, slot) <= now
+                        cells.append(
+                            {"room": room, "state": "past" if started else "free",
+                             "name": None, "rid": None}
+                        )
+                    else:
+                        mine = member is not None and row["member_id"] == member["id"]
+                        cells.append(
+                            {"room": room, "state": "mine" if mine else "taken",
+                             "name": row["name"], "rid": row["id"]}
+                        )
+                rows.append({"slot": slot, "cells": cells})
+            sections.append(
+                {"key": section, "label": config.SECTION_LABELS[section], "rows": rows}
+            )
+        tabs = [
+            {"value": d.isoformat(), "label": slots.format_day(d), "current": d == day}
+            for d in slots.selectable_dates(now)
+        ]
+        return {"day": day, "day_value": day.isoformat(), "sections": sections, "tabs": tabs}
+
+    def meals_context(now, member):
+        registered = db.count_active_members(g.conn)
+        cards = []
+        for meal in meals.visible_meals(now):
+            day = meal.day.isoformat()
+            opens, closes = meals.vote_window(meal)
+            cards.append(
+                {
+                    "day": day,
+                    "kind": meal.kind,
+                    "title": meals.format_meal(meal),
+                    "state": meals.vote_state(meal, now),
+                    "opens": f"{opens.month}/{opens.day} {opens:%H:%M}",
+                    "closes": f"{closes:%H:%M}",
+                    "wanted": db.rice_count(g.conn, day, meal.kind),
+                    "registered": registered,
+                    "voted": member is not None
+                    and db.has_voted(g.conn, day, meal.kind, member["id"]),
+                }
+            )
+        return {"cards": cards}
+
+    # --- 名前の選択 -------------------------------------------------------
+
+    @app.get("/")
+    def index():
+        return redirect(url_for("bath"))
+
+    @app.get("/select")
+    def select():
+        return render_template("select.html", members=db.list_members(g.conn))
+
+    @app.post("/select")
+    def select_post():
+        member_id = request.form.get("member_id", "")
+        target = request.form.get("next") or url_for("bath")
+        if not member_id.isdigit() or db.get_member(g.conn, int(member_id)) is None:
+            flash("名前を選んでください。")
+            return redirect(url_for("select"))
+        response = redirect(target)
+        response.set_cookie(COOKIE, member_id, max_age=COOKIE_MAX_AGE, samesite="Lax")
+        return response
+
+    # --- 風呂 -------------------------------------------------------------
+
+    @app.get("/bath")
+    def bath():
+        member = current_member()
+        if member is None:
+            return redirect(url_for("select"))
+        now = clock.now()
+        day = parse_date(request.args.get("date")) or default_bath_date(now)
+        return render_template("bath.html", **bath_context(day, now, member))
+
+    @app.get("/fragment/bath")
+    def bath_fragment():
+        member = current_member()
+        now = clock.now()
+        day = parse_date(request.args.get("date")) or default_bath_date(now)
+        return render_template("_bath_table.html", **bath_context(day, now, member))
+
+    @app.post("/bath/reserve")
+    def bath_reserve():
+        member = current_member()
+        if member is None:
+            return redirect(url_for("select"))
+        now = clock.now()
+        day = parse_date(request.form.get("date"))
+        section = request.form.get("section", "")
+        room = request.form.get("room", "")
+        slot = request.form.get("slot", "")
+        if day is None or room not in config.ROOMS:
+            flash(MESSAGES["bad_slot"])
+            return redirect(url_for("bath"))
+        reason = slots.check_reservable(day, section, slot, now)
+        if reason != "ok":
+            flash(MESSAGES[reason])
+            return redirect(url_for("bath", date=day.isoformat()))
+        result = db.reserve(g.conn, day.isoformat(), section, room, slot, member["id"])
+        if result == "already_has":
+            held = db.member_reservation(g.conn, day.isoformat(), section, member["id"])
+            flash(
+                f"{config.SECTION_LABELS[section]}の枠は {held['slot']} の"
+                f"{config.ROOM_LABELS[held['room']]}を予約済みです。"
+                "取り消してから選んでください。"
+            )
+        elif result == "slot_taken":
+            flash(MESSAGES["slot_taken"])
+        return redirect(url_for("bath", date=day.isoformat()))
+
+    @app.post("/bath/cancel")
+    def bath_cancel():
+        member = current_member()
+        if member is None:
+            return redirect(url_for("select"))
+        raw = request.form.get("reservation_id", "")
+        day = parse_date(request.form.get("date"))
+        if raw.isdigit() and not db.cancel_reservation(g.conn, int(raw), member["id"]):
+            flash("他の人の予約は取り消せません。")
+        target = day.isoformat() if day else None
+        return redirect(url_for("bath", date=target))
+
+    # --- ごはん -----------------------------------------------------------
+
+    @app.get("/meals")
+    def meals_page():
+        member = current_member()
+        if member is None:
+            return redirect(url_for("select"))
+        return render_template("meals.html", **meals_context(clock.now(), member))
+
+    @app.get("/fragment/meals")
+    def meals_fragment():
+        member = current_member()
+        return render_template("_meal_cards.html", **meals_context(clock.now(), member))
+
+    def _meal_from_form():
+        day = parse_date(request.form.get("date"))
+        kind = request.form.get("kind", "")
+        if day is None or kind not in config.MEALS or not meals.meal_in_period(kind, day):
+            return None
+        return Meal(day, kind)
+
+    @app.post("/meals/vote")
+    def meals_vote():
+        member = current_member()
+        if member is None:
+            return redirect(url_for("select"))
+        meal = _meal_from_form()
+        if meal is None or meals.vote_state(meal, clock.now()) != "open":
+            flash("受付時間外です。")
+        else:
+            db.vote(g.conn, meal.day.isoformat(), meal.kind, member["id"])
+        return redirect(url_for("meals_page"))
+
+    @app.post("/meals/unvote")
+    def meals_unvote():
+        member = current_member()
+        if member is None:
+            return redirect(url_for("select"))
+        meal = _meal_from_form()
+        if meal is None or meals.vote_state(meal, clock.now()) != "open":
+            flash("受付時間外です。")
+        else:
+            db.unvote(g.conn, meal.day.isoformat(), meal.kind, member["id"])
+        return redirect(url_for("meals_page"))
+
+    # --- 名簿 -------------------------------------------------------------
+
+    @app.get("/members")
+    def members():
+        return render_template(
+            "members.html",
+            members=db.list_members(g.conn, include_hidden=True),
+            settings=app.config["SETTINGS"],
+        )
+
+    @app.post("/members")
+    def members_add():
+        try:
+            db.add_member(g.conn, request.form.get("name", ""))
+        except ValueError as exc:
+            flash(str(exc))
+        return redirect(url_for("members"))
+
+    @app.post("/members/hide")
+    def members_hide():
+        raw = request.form.get("member_id", "")
+        active = request.form.get("active") == "1"
+        if raw.isdigit():
+            db.set_member_active(g.conn, int(raw), active)
+        return redirect(url_for("members"))
+
+    @app.post("/members/notify-test")
+    def members_notify_test():
+        settings = app.config["SETTINGS"]
+        if not settings.discord_ready:
+            flash("Discord の設定がありません。config.toml を確認してください。")
+            return redirect(url_for("members"))
+        mention = f"<@{settings.manager_id}> " if settings.manager_id else ""
+        try:
+            notify.post_message(settings, f"{mention}風呂・ごはんの試験投稿です。")
+            flash("試験投稿を送りました。")
+        except Exception as exc:
+            flash(f"投稿に失敗しました: {exc}")
+        return redirect(url_for("members"))
+
+    app.jinja_env.globals["current_member"] = current_member
+    return app

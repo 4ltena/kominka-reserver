@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block main %}
+<h2 class="section">名簿</h2>
+<form method="post" action="{{ url_for('members_add') }}" class="add">
+  <input type="text" name="name" placeholder="名前" required>
+  <button type="submit" class="btn small">追加</button>
+</form>
+<ul class="members">
+  {% for m in members %}
+  <li class="{{ 'hidden' if not m['active'] }}">
+    <span>{{ m['name'] }}</span>
+    <form method="post" action="{{ url_for('members_hide') }}">
+      <input type="hidden" name="member_id" value="{{ m['id'] }}">
+      <input type="hidden" name="active" value="{{ 0 if m['active'] else 1 }}">
+      <button type="submit" class="link">{{ '非表示にする' if m['active'] else '戻す' }}</button>
+    </form>
+  </li>
+  {% else %}
+  <li class="empty">まだ誰もいない。</li>
+  {% endfor %}
+</ul>
+
+<h2 class="section">Discord への通知</h2>
+<p class="note">
+  {% if settings.discord_ready %}投稿先の設定あり。担当者{{ 'の指定あり' if settings.manager_id else 'は未指定' }}。
+  {% else %}config.toml に bot トークンとチャンネル ID を書くと通知が始まる。{% endif %}
+</p>
+<form method="post" action="{{ url_for('members_notify_test') }}">
+  <button type="submit" class="btn small">試験投稿</button>
+</form>
+{% endblock %}

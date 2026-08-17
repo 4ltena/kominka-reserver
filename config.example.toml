@@ -1,0 +1,11 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[discord]
+# bot のトークン
+bot_token = ""
+# 投稿先チャンネルの ID
+channel_id = ""
+# 米の担当者の Discord ユーザー ID。空のあいだはメンションなしで投稿する
+manager_id = ""

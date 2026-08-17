@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block main %}
+<nav class="days">
+  {% for tab in tabs %}
+  <a href="{{ url_for('bath', date=tab.value) }}" class="{{ 'on' if tab.current }}">{{ tab.label }}</a>
+  {% endfor %}
+</nav>
+<div id="live">{% include "_bath_table.html" %}</div>
+{% endblock %}
