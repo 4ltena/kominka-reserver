@@ -36,9 +36,7 @@ def make_app(tmp_path, monkeypatch):
     def factory(now):
         monkeypatch.setattr(clock, "now", lambda: now)
         app = web.create_app(
-            config_path=tmp_path / "absent.toml",
-            db_path=tmp_path / "web.db",
-            start_notifier=False,
+            config_path=tmp_path / "absent.toml", db_path=tmp_path / "web.db"
         )
         app.config["TESTING"] = True
         return app

@@ -38,14 +38,6 @@ CREATE TABLE IF NOT EXISTS rice_votes (
   created_at TEXT    NOT NULL,
   UNIQUE (date, meal, member_id)
 );
-
-CREATE TABLE IF NOT EXISTS notifications (
-  id      INTEGER PRIMARY KEY,
-  date    TEXT NOT NULL,
-  meal    TEXT NOT NULL CHECK (meal IN ('breakfast', 'dinner')),
-  sent_at TEXT NOT NULL,
-  UNIQUE (date, meal)
-);
 """
 
 
@@ -196,17 +188,3 @@ def unvote(conn, day: str, kind: str, member_id: int) -> bool:
     )
     conn.commit()
     return cur.rowcount > 0
-
-
-# --- 通知 -----------------------------------------------------------------
-
-def sent_notifications(conn) -> set[tuple[str, str]]:
-    return {(row["date"], row["meal"]) for row in conn.execute("SELECT date, meal FROM notifications")}
-
-
-def mark_notified(conn, day: str, kind: str, at: str) -> None:
-    conn.execute(
-        "INSERT OR IGNORE INTO notifications (date, meal, sent_at) VALUES (?, ?, ?)",
-        (day, kind, at),
-    )
-    conn.commit()

@@ -20,12 +20,4 @@
   {% endfor %}
 </ul>
 
-<h2 class="section">Discord への通知</h2>
-<p class="note">
-  {% if settings.discord_ready %}投稿先の設定あり。担当者{{ 'の指定あり' if settings.manager_id else 'は未指定' }}。
-  {% else %}config.toml に bot トークンとチャンネル ID を書くと通知が始まる。{% endif %}
-</p>
-<form method="post" action="{{ url_for('members_notify_test') }}">
-  <button type="submit" class="btn small">試験投稿</button>
-</form>
 {% endblock %}

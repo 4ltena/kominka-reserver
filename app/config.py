@@ -42,8 +42,6 @@ VOTE_WINDOW = {
     "dinner": (0, 9, 18),
 }
 
-NOTIFY_MAX_DELAY_SECONDS = 24 * 60 * 60
-
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = ROOT / "config.toml"
 DEFAULT_DB_PATH = ROOT / "data" / "furo-gohan.db"
@@ -51,15 +49,8 @@ DEFAULT_DB_PATH = ROOT / "data" / "furo-gohan.db"
 
 @dataclass(frozen=True)
 class Settings:
-    bot_token: str = ""
-    channel_id: str = ""
-    manager_id: str = ""
     host: str = "0.0.0.0"
     port: int = 8080
-
-    @property
-    def discord_ready(self) -> bool:
-        return bool(self.bot_token and self.channel_id)
 
 
 def load_settings(path: str | Path | None = None) -> Settings:
@@ -67,12 +58,8 @@ def load_settings(path: str | Path | None = None) -> Settings:
     if not path.exists():
         return Settings()
     data = tomllib.loads(path.read_text(encoding="utf-8"))
-    discord = data.get("discord", {})
     server = data.get("server", {})
     return Settings(
-        bot_token=str(discord.get("bot_token", "")),
-        channel_id=str(discord.get("channel_id", "")),
-        manager_id=str(discord.get("manager_id", "")),
         host=str(server.get("host", "0.0.0.0")),
         port=int(server.get("port", 8080)),
     )

@@ -78,10 +78,3 @@ def test_unvote(conn, alice):
     assert db.unvote(conn, "2026-08-20", "dinner", alice) is True
     assert db.unvote(conn, "2026-08-20", "dinner", alice) is False
     assert db.rice_count(conn, "2026-08-20", "dinner") == 0
-
-
-def test_notification_records(conn):
-    assert db.sent_notifications(conn) == set()
-    db.mark_notified(conn, "2026-08-20", "dinner", "2026-08-20T18:00:00")
-    db.mark_notified(conn, "2026-08-20", "dinner", "2026-08-20T18:01:00")
-    assert db.sent_notifications(conn) == {("2026-08-20", "dinner")}

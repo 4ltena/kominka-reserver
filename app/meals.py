@@ -58,20 +58,6 @@ def visible_meals(now: datetime) -> list[Meal]:
     return closed[-1:] + upcoming[:3]
 
 
-def pending_notifications(now: datetime, sent: set[tuple[str, str]]) -> list[Meal]:
-    out = []
-    for meal in all_meals():
-        if vote_state(meal, now) != "closed":
-            continue
-        if (meal.day.isoformat(), meal.kind) in sent:
-            continue
-        delay = (now - vote_window(meal)[1]).total_seconds()
-        if delay > config.NOTIFY_MAX_DELAY_SECONDS:
-            continue
-        out.append(meal)
-    return out
-
-
 def format_meal(meal: Meal) -> str:
     weekday = config.WEEKDAYS[meal.day.weekday()]
     return f"{meal.day.month}/{meal.day.day}({weekday}) {config.MEAL_LABELS[meal.kind]}"

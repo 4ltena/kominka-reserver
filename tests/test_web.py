@@ -157,12 +157,6 @@ def test_members_add_hide_and_duplicate(signed_in):
     assert "いる 0人 / 登録 2人" in body(client.get("/meals"))
 
 
-def test_notify_test_without_settings(signed_in):
-    _, client = signed_in(NOON)
-    page = body(client.post("/members/notify-test", follow_redirects=True))
-    assert "Discord の設定がありません" in page
-
-
 def test_select_ignores_external_redirect_target(signed_in):
     _, client = signed_in(NOON)
     response = client.post(

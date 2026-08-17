@@ -12,7 +12,7 @@ from pathlib import Path
 
 from flask import Flask, flash, g, redirect, render_template, request, url_for
 
-from . import clock, config, db, meals, notify, slots
+from . import clock, config, db, meals, slots
 from .meals import Meal
 
 COOKIE = "member_id"
@@ -35,7 +35,7 @@ def _secret_key(db_path: Path) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
-def create_app(config_path=None, db_path=None, start_notifier: bool = True) -> Flask:
+def create_app(config_path=None, db_path=None) -> Flask:
     app = Flask(__name__)
     db_path = Path(db_path) if db_path else config.DEFAULT_DB_PATH
     settings = config.load_settings(config_path)
@@ -46,9 +46,6 @@ def create_app(config_path=None, db_path=None, start_notifier: bool = True) -> F
     conn = db.connect(db_path)
     db.init_schema(conn)
     conn.close()
-
-    if start_notifier:
-        notify.start_worker(db_path, settings)
 
     @app.before_request
     def _open_db():
@@ -273,9 +270,7 @@ def create_app(config_path=None, db_path=None, start_notifier: bool = True) -> F
     @app.get("/members")
     def members():
         return render_template(
-            "members.html",
-            members=db.list_members(g.conn, include_hidden=True),
-            settings=app.config["SETTINGS"],
+            "members.html", members=db.list_members(g.conn, include_hidden=True)
         )
 
     @app.post("/members")
@@ -292,20 +287,6 @@ def create_app(config_path=None, db_path=None, start_notifier: bool = True) -> F
         active = request.form.get("active") == "1"
         if raw.isdigit():
             db.set_member_active(g.conn, int(raw), active)
-        return redirect(url_for("members"))
-
-    @app.post("/members/notify-test")
-    def members_notify_test():
-        settings = app.config["SETTINGS"]
-        if not settings.discord_ready:
-            flash("Discord の設定がありません。config.toml を確認してください。")
-            return redirect(url_for("members"))
-        mention = f"<@{settings.manager_id}> " if settings.manager_id else ""
-        try:
-            notify.post_message(settings, f"{mention}風呂・ごはんの試験投稿です。")
-            flash("試験投稿を送りました。")
-        except Exception as exc:
-            flash(f"投稿に失敗しました: {exc}")
         return redirect(url_for("members"))
 
     app.jinja_env.globals["current_member"] = current_member
