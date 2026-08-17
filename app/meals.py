@@ -33,21 +33,15 @@ def all_meals() -> list[Meal]:
     return out
 
 
-def vote_window(meal: Meal) -> tuple[datetime, datetime]:
-    shift, open_hour, close_hour = config.VOTE_WINDOW[meal.kind]
+def vote_deadline(meal: Meal) -> datetime:
+    shift, close_hour = config.VOTE_DEADLINE[meal.kind]
     base = meal.day + timedelta(days=shift)
-    opens = datetime(base.year, base.month, base.day, open_hour, tzinfo=config.TZ)
-    closes = datetime(base.year, base.month, base.day, close_hour, tzinfo=config.TZ)
-    return opens, closes
+    return datetime(base.year, base.month, base.day, close_hour, tzinfo=config.TZ)
 
 
 def vote_state(meal: Meal, now: datetime) -> str:
-    opens, closes = vote_window(meal)
-    if now < opens:
-        return "before"
-    if now < closes:
-        return "open"
-    return "closed"
+    """受付開始は設けない。締切まではいつでも挙手できる。"""
+    return "open" if now < vote_deadline(meal) else "closed"
 
 
 def visible_meals(now: datetime) -> list[Meal]:

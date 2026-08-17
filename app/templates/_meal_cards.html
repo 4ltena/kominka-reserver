@@ -2,8 +2,7 @@
 <section class="card {{ card.state }}">
   <h2>{{ card.title }}ごはん</h2>
   <p class="state">
-    {% if card.state == 'open' %}受付中 ・ {{ card.closes }}まで
-    {% elif card.state == 'before' %}{{ card.opens }} から
+    {% if card.state == 'open' %}{{ card.closes }} まで
     {% else %}締切{% endif %}
   </p>
   {% if card.state == 'open' %}

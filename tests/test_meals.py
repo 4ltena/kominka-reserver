@@ -5,24 +5,24 @@ from app.meals import (
     all_meals,
     visible_meals,
     vote_state,
-    vote_window,
+    vote_deadline,
 )
 
 from .conftest import at
 
 
-def test_breakfast_window_is_previous_evening():
-    assert vote_window(Meal(date(2026, 8, 19), "breakfast")) == (at(8, 18, 18), at(8, 18, 22))
+def test_breakfast_deadline_is_previous_evening():
+    assert vote_deadline(Meal(date(2026, 8, 19), "breakfast")) == at(8, 18, 22)
 
 
-def test_dinner_window_is_same_day():
-    assert vote_window(Meal(date(2026, 8, 19), "dinner")) == (at(8, 19, 9), at(8, 19, 18))
+def test_dinner_deadline_is_same_day():
+    assert vote_deadline(Meal(date(2026, 8, 19), "dinner")) == at(8, 19, 18)
 
 
-def test_vote_state_boundaries():
+def test_vote_state_has_no_opening_bound():
     meal = Meal(date(2026, 8, 19), "dinner")
-    assert vote_state(meal, at(8, 19, 8, 59)) == "before"
-    assert vote_state(meal, at(8, 19, 9)) == "open"
+    assert vote_state(meal, at(8, 17, 3)) == "open"
+    assert vote_state(meal, at(8, 19, 8, 59)) == "open"
     assert vote_state(meal, at(8, 19, 17, 59)) == "open"
     assert vote_state(meal, at(8, 19, 18)) == "closed"
 
@@ -37,7 +37,7 @@ def test_all_meals_bounds():
 
 
 def test_all_meals_are_ordered_by_deadline():
-    deadlines = [vote_window(m)[1] for m in all_meals()]
+    deadlines = [vote_deadline(m) for m in all_meals()]
     assert deadlines == sorted(deadlines)
 
 

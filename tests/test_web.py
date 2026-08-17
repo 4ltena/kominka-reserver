@@ -136,25 +136,21 @@ def test_closed_meal_rejects_vote(signed_in):
         conn.close()
 
 
-def test_card_before_window_shows_start_time(signed_in):
+def test_future_meal_is_open_without_a_start_time(signed_in):
     _, client = signed_in(NOON)
     page = body(client.get("/meals"))
-    assert "8/20 18:00 から" in page
+    assert "から" not in page
+    assert "8/21 18:00 まで" in page
 
 
-def test_members_add_hide_and_duplicate(signed_in):
+def test_roster_is_read_only(signed_in):
     _, client = signed_in(NOON)
-    page = body(client.post("/members", data={"name": "そら"}, follow_redirects=True))
-    assert "そら" in page
-
-    page = body(client.post("/members", data={"name": "そら"}, follow_redirects=True))
-    assert "同じ名前がすでにあります" in page
-
-    page = body(
-        client.post("/members/hide", data={"member_id": "3", "active": "0"}, follow_redirects=True)
-    )
-    assert "戻す" in page
-    assert "いる 0人 / 登録 2人" in body(client.get("/meals"))
+    page = body(client.get("/members"))
+    assert "あかり" in page and "ゆうと" in page
+    assert "追加" not in page
+    assert "非表示" not in page
+    assert client.post("/members", data={"name": "そら"}).status_code == 405
+    assert client.post("/members/hide", data={"member_id": "1"}).status_code == 404
 
 
 def test_select_ignores_external_redirect_target(signed_in):

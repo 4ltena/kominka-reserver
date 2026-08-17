@@ -33,13 +33,14 @@ PERIOD = {
 # 枠の長さは浴室ごとに違う。浴槽付きは 20 分、浴槽なしは 15 分。
 ROOM_SLOT_MINUTES = {"shower": 15, "tub": 20}
 SECTION_HOURS = {"morning": (6, 8), "night": (19, 24)}
-# 区分によっては終了時刻より早く受付を打ち切る。値は最後の入浴開始時刻。
-SECTION_LAST_START = {"night": "23:00"}
+# 区分によっては最後の入浴開始時刻を明示する。指定が無ければ、枠が区分の
+# 終了時刻をはみ出さない範囲で並べる。24:00 は翌日の 00:00 を指す。
+SECTION_LAST_START = {"night": "24:00"}
 
-# 食事の投票窓。(対象日からの日数のずれ, 受付開始の時, 締切の時)
-VOTE_WINDOW = {
-    "breakfast": (-1, 18, 22),
-    "dinner": (0, 9, 18),
+# 食事の投票の締切。(対象日からの日数のずれ, 締切の時)。受付開始は設けない。
+VOTE_DEADLINE = {
+    "breakfast": (-1, 22),
+    "dinner": (0, 18),
 }
 
 ROOT = Path(__file__).resolve().parent.parent

@@ -12,12 +12,13 @@ def slot_starts(section: str, room: str) -> tuple[str, ...]:
     start_hour, end_hour = config.SECTION_HOURS[section]
     step = config.ROOM_SLOT_MINUTES[room]
 
-    # 枠が区分の終了時刻をはみ出さない最後の開始。
-    limit = end_hour * 60 - step
     override = config.SECTION_LAST_START.get(section)
     if override is not None:
         hour, minute = (int(part) for part in override.split(":"))
-        limit = min(limit, hour * 60 + minute)
+        limit = hour * 60 + minute
+    else:
+        # 指定が無ければ、枠が区分の終了時刻をはみ出さない最後の開始。
+        limit = end_hour * 60 - step
 
     starts = []
     minute = start_hour * 60
@@ -37,7 +38,11 @@ def sections_for_date(day: date) -> tuple[str, ...]:
 
 
 def slot_datetime(day: date, slot: str) -> datetime:
+    """"24:00" は翌日の 00:00 を指す。夜の最終枠がこの形になる。"""
     hour, minute = (int(part) for part in slot.split(":"))
+    if hour >= 24:
+        day += timedelta(days=hour // 24)
+        hour %= 24
     return datetime(day.year, day.month, day.day, hour, minute, tzinfo=config.TZ)
 
 

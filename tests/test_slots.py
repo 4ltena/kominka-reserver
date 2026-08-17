@@ -3,6 +3,7 @@ from datetime import date
 from app import config
 from app.slots import (
     check_reservable,
+    slot_datetime,
     sections_for_date,
     selectable_dates,
     slot_starts,
@@ -24,16 +25,16 @@ def test_shower_morning_slots_are_15_minutes():
     )
 
 
-def test_tub_night_slots_stop_at_23_00():
+def test_tub_night_slots_run_to_24_00():
     starts = slot_starts("night", "tub")
-    assert len(starts) == 13
-    assert starts[0] == "19:00" and starts[-1] == "23:00"
+    assert len(starts) == 16
+    assert starts[0] == "19:00" and starts[-1] == "24:00"
 
 
-def test_shower_night_slots_stop_at_23_00():
+def test_shower_night_slots_run_to_24_00():
     starts = slot_starts("night", "shower")
-    assert len(starts) == 17
-    assert starts[0] == "19:00" and starts[-1] == "23:00"
+    assert len(starts) == 21
+    assert starts[0] == "19:00" and starts[-1] == "24:00"
 
 
 def test_first_day_is_night_only():
@@ -97,9 +98,16 @@ def test_unknown_room_rejected():
     assert check_reservable(date(2026, 8, 20), "night", "sauna", "19:00", now) == "bad_slot"
 
 
-def test_no_night_slot_starts_after_23_00():
+def test_night_reaches_24_00():
     now = at(8, 20, 12)
     for room in ("shower", "tub"):
-        assert check_reservable(date(2026, 8, 20), "night", room, "23:00", now) == "ok"
-    assert check_reservable(date(2026, 8, 20), "night", "shower", "23:15", now) == "bad_slot"
-    assert check_reservable(date(2026, 8, 20), "night", "tub", "23:20", now) == "bad_slot"
+        assert check_reservable(date(2026, 8, 20), "night", room, "24:00", now) == "ok"
+    assert check_reservable(date(2026, 8, 20), "night", "shower", "23:45", now) == "ok"
+    assert check_reservable(date(2026, 8, 20), "night", "tub", "23:40", now) == "ok"
+
+
+def test_24_00_slot_means_the_next_midnight():
+    assert slot_datetime(date(2026, 8, 20), "24:00") == at(8, 21, 0)
+    # 日付が変わる直前まで取れる。変わった後は 8/20 自体が選べなくなる。
+    assert check_reservable(date(2026, 8, 20), "night", "tub", "24:00", at(8, 20, 23, 59)) == "ok"
+    assert check_reservable(date(2026, 8, 20), "night", "tub", "24:00", at(8, 21, 0, 1)) != "ok"

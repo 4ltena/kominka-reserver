@@ -124,15 +124,14 @@ def create_app(config_path=None, db_path=None) -> Flask:
         cards = []
         for meal in meals.visible_meals(now):
             day = meal.day.isoformat()
-            opens, closes = meals.vote_window(meal)
+            closes = meals.vote_deadline(meal)
             cards.append(
                 {
                     "day": day,
                     "kind": meal.kind,
                     "title": meals.format_meal(meal),
                     "state": meals.vote_state(meal, now),
-                    "opens": f"{opens.month}/{opens.day} {opens:%H:%M}",
-                    "closes": f"{closes:%H:%M}",
+                    "closes": f"{closes.month}/{closes.day} {closes:%H:%M}",
                     "wanted": db.rice_count(g.conn, day, meal.kind),
                     "registered": registered,
                     "voted": member is not None
@@ -269,25 +268,7 @@ def create_app(config_path=None, db_path=None) -> Flask:
 
     @app.get("/members")
     def members():
-        return render_template(
-            "members.html", members=db.list_members(g.conn, include_hidden=True)
-        )
-
-    @app.post("/members")
-    def members_add():
-        try:
-            db.add_member(g.conn, request.form.get("name", ""))
-        except ValueError as exc:
-            flash(str(exc))
-        return redirect(url_for("members"))
-
-    @app.post("/members/hide")
-    def members_hide():
-        raw = request.form.get("member_id", "")
-        active = request.form.get("active") == "1"
-        if raw.isdigit():
-            db.set_member_active(g.conn, int(raw), active)
-        return redirect(url_for("members"))
+        return render_template("members.html", members=db.list_members(g.conn))
 
     app.jinja_env.globals["current_member"] = current_member
     return app

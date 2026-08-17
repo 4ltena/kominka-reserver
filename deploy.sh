@@ -54,7 +54,7 @@ echo "==> ファイルの転送"
 run "mkdir -p '${APP_DIR}'"
 send() {
   tar --exclude '__pycache__' -czf - -C "$HERE" \
-      app run.py requirements.txt config.example.toml furo-gohan.service \
+      app run.py roster.py requirements.txt config.example.toml furo-gohan.service \
     | sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}" \
         "tar -xzf - -C '${APP_DIR}'"
 }
