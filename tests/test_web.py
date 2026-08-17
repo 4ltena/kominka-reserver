@@ -161,3 +161,11 @@ def test_notify_test_without_settings(signed_in):
     _, client = signed_in(NOON)
     page = body(client.post("/members/notify-test", follow_redirects=True))
     assert "Discord の設定がありません" in page
+
+
+def test_select_ignores_external_redirect_target(signed_in):
+    _, client = signed_in(NOON)
+    response = client.post(
+        "/select", data={"member_id": "1", "next": "https://example.com/steal"}
+    )
+    assert response.headers["Location"].endswith("/bath")

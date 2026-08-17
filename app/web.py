@@ -157,11 +157,10 @@ def create_app(config_path=None, db_path=None, start_notifier: bool = True) -> F
     @app.post("/select")
     def select_post():
         member_id = request.form.get("member_id", "")
-        target = request.form.get("next") or url_for("bath")
         if not member_id.isdigit() or db.get_member(g.conn, int(member_id)) is None:
             flash("名前を選んでください。")
             return redirect(url_for("select"))
-        response = redirect(target)
+        response = redirect(url_for("bath"))
         response.set_cookie(COOKIE, member_id, max_age=COOKIE_MAX_AGE, samesite="Lax")
         return response
 
