@@ -3,14 +3,22 @@
 # data/ と config.toml は上書きしない。
 set -euo pipefail
 
-PI_HOST="${PI_HOST:-raspi}"
+PI_HOST="${PI_HOST:-raspberrypi.local}"
 PI_USER="${PI_USER:-pi}"
 PI_PASS="${PI_PASS:-xxxx}"
 APP_DIR="${APP_DIR:-/home/${PI_USER}/furo-gohan}"
 SERVICE=furo-gohan
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
+# 回線が不安定な環境でも切れにくいようにする。
+SSH_OPTS=(
+  -o StrictHostKeyChecking=accept-new
+  -o ConnectTimeout=30
+  -o ServerAliveInterval=5
+  -o ServerAliveCountMax=6
+  -o PreferredAuthentications=password
+  -o PubkeyAuthentication=no
+)
 
 if ! command -v sshpass >/dev/null 2>&1; then
   echo "sshpass が要る。brew install hudochenkov/sshpass/sshpass" >&2
@@ -22,7 +30,21 @@ run() {
 }
 
 run_sudo() {
-  run "echo '${PI_PASS}' | sudo -S sh -c '$*' 2>/dev/null"
+  run "echo '${PI_PASS}' | sudo -S -p '' sh -c '$*'"
+}
+
+# 不安定な回線で 1 回落ちても続けられるように、3 回まで試す。
+retry() {
+  local n=1
+  until "$@"; do
+    if [ "$n" -ge 3 ]; then
+      echo "3 回試して失敗した: $*" >&2
+      return 1
+    fi
+    n=$((n + 1))
+    echo "  再試行 ${n}/3"
+    sleep 3
+  done
 }
 
 echo "==> 接続確認 ${PI_USER}@${PI_HOST}"
@@ -30,17 +52,20 @@ run true
 
 echo "==> ファイルの転送"
 run "mkdir -p '${APP_DIR}'"
-tar --exclude '__pycache__' -czf - -C "$HERE" \
-    app run.py requirements.txt config.example.toml furo-gohan.service \
-  | sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}" \
-      "tar -xzf - -C '${APP_DIR}'"
+send() {
+  tar --exclude '__pycache__' -czf - -C "$HERE" \
+      app run.py requirements.txt config.example.toml furo-gohan.service \
+    | sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}" \
+        "tar -xzf - -C '${APP_DIR}'"
+}
+retry send
 
 echo "==> 依存の導入"
-run_sudo "apt-get update -qq"
-run_sudo "apt-get install -y -qq python3-venv python3-pip curl"
+retry run_sudo "apt-get update -qq"
+retry run_sudo "apt-get install -y -qq python3-venv python3-pip curl"
 run "test -d '${APP_DIR}/.venv' || python3 -m venv '${APP_DIR}/.venv'"
 run "'${APP_DIR}/.venv/bin/pip' -q install --upgrade pip"
-run "'${APP_DIR}/.venv/bin/pip' -q install -r '${APP_DIR}/requirements.txt'"
+retry run "'${APP_DIR}/.venv/bin/pip' -q install -r '${APP_DIR}/requirements.txt'"
 
 echo "==> 設定とデータ (既存は残す)"
 run "mkdir -p '${APP_DIR}/data'"
@@ -60,7 +85,7 @@ run_sudo "systemctl restart ${SERVICE}"
 echo "==> 応答の確認"
 for i in 1 2 3 4 5; do
   if run "curl -fsS -o /dev/null http://localhost:8080/"; then
-    echo "配置完了  http://${PI_HOST}.local:8080/"
+    echo "配置完了  http://${PI_HOST}:8080/"
     exit 0
   fi
   sleep 2
