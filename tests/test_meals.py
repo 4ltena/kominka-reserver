@@ -30,7 +30,8 @@ def test_vote_state_boundaries():
 
 def test_all_meals_bounds():
     meals = all_meals()
-    assert meals[0] == Meal(date(2026, 8, 18), "breakfast")
+    assert meals[0] == Meal(date(2026, 8, 18), "dinner")
+    assert Meal(date(2026, 8, 18), "breakfast") not in meals
     assert meals[-1] == Meal(date(2026, 8, 28), "breakfast")
     assert Meal(date(2026, 8, 28), "dinner") not in meals
     assert Meal(date(2026, 8, 17), "dinner") not in meals

@@ -25,13 +25,16 @@ WEEKDAYS = ("月", "火", "水", "木", "金", "土", "日")
 PERIOD = {
     ("bath", "night"): (date(2026, 8, 17), date(2026, 8, 27)),
     ("bath", "morning"): (date(2026, 8, 18), date(2026, 8, 28)),
-    ("meal", "breakfast"): (date(2026, 8, 18), date(2026, 8, 28)),
+    # 8/18 の朝ごはんは投票窓 (8/17 18:00-22:00) が閉じたあとに決まったため対象外。
+    ("meal", "breakfast"): (date(2026, 8, 19), date(2026, 8, 28)),
     ("meal", "dinner"): (date(2026, 8, 18), date(2026, 8, 27)),
 }
 
 # 枠の長さは浴室ごとに違う。浴槽付きは 20 分、浴槽なしは 15 分。
 ROOM_SLOT_MINUTES = {"shower": 15, "tub": 20}
 SECTION_HOURS = {"morning": (6, 8), "night": (19, 24)}
+# 区分によっては終了時刻より早く受付を打ち切る。値は最後の入浴開始時刻。
+SECTION_LAST_START = {"night": "23:00"}
 
 # 食事の投票窓。(対象日からの日数のずれ, 受付開始の時, 締切の時)
 VOTE_WINDOW = {

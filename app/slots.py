@@ -11,10 +11,17 @@ def slot_starts(section: str, room: str) -> tuple[str, ...]:
     """枠の長さは浴室ごとに違うため、開始時刻の並びも浴室ごとに変わる。"""
     start_hour, end_hour = config.SECTION_HOURS[section]
     step = config.ROOM_SLOT_MINUTES[room]
+
+    # 枠が区分の終了時刻をはみ出さない最後の開始。
+    limit = end_hour * 60 - step
+    override = config.SECTION_LAST_START.get(section)
+    if override is not None:
+        hour, minute = (int(part) for part in override.split(":"))
+        limit = min(limit, hour * 60 + minute)
+
     starts = []
     minute = start_hour * 60
-    end = end_hour * 60
-    while minute < end:
+    while minute <= limit:
         starts.append(f"{minute // 60:02d}:{minute % 60:02d}")
         minute += step
     return tuple(starts)

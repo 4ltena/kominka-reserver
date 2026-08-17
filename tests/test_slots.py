@@ -24,16 +24,16 @@ def test_shower_morning_slots_are_15_minutes():
     )
 
 
-def test_tub_night_slots():
+def test_tub_night_slots_stop_at_23_00():
     starts = slot_starts("night", "tub")
-    assert len(starts) == 15
-    assert starts[0] == "19:00" and starts[-1] == "23:40"
+    assert len(starts) == 13
+    assert starts[0] == "19:00" and starts[-1] == "23:00"
 
 
-def test_shower_night_slots():
+def test_shower_night_slots_stop_at_23_00():
     starts = slot_starts("night", "shower")
-    assert len(starts) == 20
-    assert starts[0] == "19:00" and starts[-1] == "23:45"
+    assert len(starts) == 17
+    assert starts[0] == "19:00" and starts[-1] == "23:00"
 
 
 def test_first_day_is_night_only():
@@ -95,3 +95,11 @@ def test_slot_length_differs_between_rooms():
 def test_unknown_room_rejected():
     now = at(8, 20, 12)
     assert check_reservable(date(2026, 8, 20), "night", "sauna", "19:00", now) == "bad_slot"
+
+
+def test_no_night_slot_starts_after_23_00():
+    now = at(8, 20, 12)
+    for room in ("shower", "tub"):
+        assert check_reservable(date(2026, 8, 20), "night", room, "23:00", now) == "ok"
+    assert check_reservable(date(2026, 8, 20), "night", "shower", "23:15", now) == "bad_slot"
+    assert check_reservable(date(2026, 8, 20), "night", "tub", "23:20", now) == "bad_slot"
