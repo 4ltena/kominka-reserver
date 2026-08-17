@@ -16,7 +16,7 @@ def test_redirects_to_select_without_cookie(make_app):
 
 def test_select_guides_to_members_when_empty(make_app):
     client = make_app(NOON).test_client()
-    assert "名簿がまだ空" in body(client.get("/select"))
+    assert "名簿が空です" in body(client.get("/select"))
 
 
 def test_reserve_shows_own_name_and_cancel(signed_in):
