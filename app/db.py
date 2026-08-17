@@ -10,6 +10,8 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from .config import RICE_GO
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS members (
   id         INTEGER PRIMARY KEY,
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS rice_votes (
   date       TEXT    NOT NULL,
   meal       TEXT    NOT NULL CHECK (meal IN ('breakfast', 'dinner')),
   member_id  INTEGER NOT NULL REFERENCES members(id),
+  size       TEXT    NOT NULL DEFAULT 'normal',
   created_at TEXT    NOT NULL,
   UNIQUE (date, meal, member_id)
 );
@@ -54,6 +57,12 @@ def connect(path: str | Path) -> sqlite3.Connection:
 
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    # 既に動いている DB には列を後から足す。CREATE では追えないため。
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(rice_votes)")}
+    if "size" not in columns:
+        conn.execute(
+            "ALTER TABLE rice_votes ADD COLUMN size TEXT NOT NULL DEFAULT 'normal'"
+        )
     conn.commit()
 
 
@@ -153,32 +162,39 @@ def cancel_reservation(conn, reservation_id: int, member_id: int) -> bool:
 
 # --- 白米 -----------------------------------------------------------------
 
-def rice_count(conn, day: str, kind: str) -> int:
-    row = conn.execute(
-        "SELECT COUNT(*) AS n FROM rice_votes WHERE date = ? AND meal = ?", (day, kind)
-    ).fetchone()
-    return int(row["n"])
+def rice_summary(conn, day: str, kind: str) -> tuple[int, float]:
+    """(挙手した人数, 合計の合数) を返す。"""
+    rows = conn.execute(
+        "SELECT size, COUNT(*) AS n FROM rice_votes WHERE date = ? AND meal = ? GROUP BY size",
+        (day, kind),
+    ).fetchall()
+    people = sum(int(row["n"]) for row in rows)
+    total = sum(RICE_GO.get(row["size"], 0.0) * int(row["n"]) for row in rows)
+    return people, total
 
 
-def has_voted(conn, day: str, kind: str, member_id: int) -> bool:
+def member_vote(conn, day: str, kind: str, member_id: int) -> str | None:
+    """その人が選んだ量。挙手していなければ None。"""
     row = conn.execute(
-        "SELECT 1 FROM rice_votes WHERE date = ? AND meal = ? AND member_id = ?",
+        "SELECT size FROM rice_votes WHERE date = ? AND meal = ? AND member_id = ?",
         (day, kind, member_id),
     ).fetchone()
-    return row is not None
+    return row["size"] if row is not None else None
 
 
-def vote(conn, day: str, kind: str, member_id: int) -> bool:
-    try:
-        conn.execute(
-            "INSERT INTO rice_votes (date, meal, member_id, created_at) VALUES (?, ?, ?, ?)",
-            (day, kind, member_id, _stamp()),
-        )
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        conn.rollback()
-        return False
+def vote(conn, day: str, kind: str, member_id: int, size: str) -> None:
+    """挙手する。すでに挙手していれば量を差し替える。"""
+    if size not in RICE_GO:
+        raise ValueError(f"知らない量: {size}")
+    conn.execute(
+        """
+        INSERT INTO rice_votes (date, meal, member_id, size, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT (date, meal, member_id) DO UPDATE SET size = excluded.size
+        """,
+        (day, kind, member_id, size, _stamp()),
+    )
+    conn.commit()
 
 
 def unvote(conn, day: str, kind: str, member_id: int) -> bool:

@@ -27,6 +27,11 @@ MESSAGES = {
 }
 
 
+def format_go(total: float) -> str:
+    """0.5 刻みなので、整数のときは小数点を落とす。"""
+    return f"{total:g}"
+
+
 def _secret_key(db_path: Path) -> str:
     path = Path(db_path).parent / "secret_key"
     if not path.exists():
@@ -93,23 +98,19 @@ def create_app(config_path=None, db_path=None) -> Flask:
             columns = []
             for room in config.ROOMS:
                 rows = []
-                crossed = False
                 for slot in slots.slot_starts(section, room):
-                    # 24 時をまたぐ最初の枠に印を付け、表に区切りを入れる。
-                    daybreak = not crossed and int(slot[:2]) >= 24
-                    crossed = crossed or daybreak
                     row = reserved.get((room, slot))
                     if row is None:
                         started = slots.slot_datetime(day, slot) <= now
                         rows.append(
                             {"slot": slot, "state": "past" if started else "free",
-                             "name": None, "rid": None, "daybreak": daybreak}
+                             "name": None, "rid": None}
                         )
                     else:
                         mine = member is not None and row["member_id"] == member["id"]
                         rows.append(
                             {"slot": slot, "state": "mine" if mine else "taken",
-                             "name": row["name"], "rid": row["id"], "daybreak": daybreak}
+                             "name": row["name"], "rid": row["id"]}
                         )
                 columns.append(
                     {
@@ -134,6 +135,7 @@ def create_app(config_path=None, db_path=None) -> Flask:
         for meal in meals.visible_meals(now):
             day = meal.day.isoformat()
             closes = meals.vote_deadline(meal)
+            people, total = db.rice_summary(g.conn, day, meal.kind)
             cards.append(
                 {
                     "day": day,
@@ -141,10 +143,11 @@ def create_app(config_path=None, db_path=None) -> Flask:
                     "title": meals.format_meal(meal),
                     "state": meals.vote_state(meal, now),
                     "closes": f"{closes.month}/{closes.day} {closes:%H:%M}",
-                    "wanted": db.rice_count(g.conn, day, meal.kind),
+                    "wanted": people,
+                    "total": format_go(total),
                     "registered": registered,
                     "voted": member is not None
-                    and db.has_voted(g.conn, day, meal.kind, member["id"]),
+                    and db.member_vote(g.conn, day, meal.kind, member["id"]),
                 }
             )
         return {"cards": cards}
@@ -255,10 +258,13 @@ def create_app(config_path=None, db_path=None) -> Flask:
         if member is None:
             return redirect(url_for("select"))
         meal = _meal_from_form()
-        if meal is None or meals.vote_state(meal, clock.now()) != "open":
+        size = request.form.get("size", "")
+        if size not in config.RICE_SIZES:
+            flash(MESSAGES["bad_slot"])
+        elif meal is None or meals.vote_state(meal, clock.now()) != "open":
             flash("受付時間外です。")
         else:
-            db.vote(g.conn, meal.day.isoformat(), meal.kind, member["id"])
+            db.vote(g.conn, meal.day.isoformat(), meal.kind, member["id"], size)
         return redirect(url_for("meals_page"))
 
     @app.post("/meals/unvote")

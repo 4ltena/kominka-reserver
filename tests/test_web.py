@@ -94,20 +94,31 @@ def test_out_of_period_day_shows_notice(signed_in):
     assert "対象期間外" in body(client.get("/bath?date=2026-08-29"))
 
 
-def test_meal_vote_flow(signed_in):
+def test_meal_vote_with_sizes(signed_in):
     _, client = signed_in(NOON)
     page = body(client.get("/meals"))
-    assert "いる 0人 / 登録 2人" in page
+    assert "通常" in page and "大盛" in page
+    assert "0合" in page
 
     page = body(
         client.post(
             "/meals/vote",
-            data={"date": "2026-08-20", "kind": "dinner"},
+            data={"date": "2026-08-20", "kind": "dinner", "size": "normal"},
             follow_redirects=True,
         )
     )
-    assert "いる ✓" in page
-    assert "キャンセル" in page
+    assert "通常 ✓" in page
+    assert "0.5合" in page
+    assert "いる 1人 / 登録 2人" in page
+
+    page = body(
+        client.post(
+            "/meals/vote",
+            data={"date": "2026-08-20", "kind": "dinner", "size": "large"},
+            follow_redirects=True,
+        )
+    )
+    assert "大盛 ✓" in page
     assert "いる 1人 / 登録 2人" in page
 
     page = body(
@@ -120,19 +131,30 @@ def test_meal_vote_flow(signed_in):
     assert "いる 0人 / 登録 2人" in page
 
 
+def test_two_members_amounts_are_summed(signed_in):
+    app, client = signed_in(NOON)
+    other = app.test_client()
+    other.set_cookie("member_id", "2")
+    client.post("/meals/vote", data={"date": "2026-08-20", "kind": "dinner", "size": "large"})
+    other.post("/meals/vote", data={"date": "2026-08-20", "kind": "dinner", "size": "normal"})
+    page = body(client.get("/meals"))
+    assert "1.5合" in page
+    assert "いる 2人 / 登録 2人" in page
+
+
 def test_closed_meal_rejects_vote(signed_in):
     app, client = signed_in(NOON)
     page = body(
         client.post(
             "/meals/vote",
-            data={"date": "2026-08-20", "kind": "breakfast"},
+            data={"date": "2026-08-20", "kind": "breakfast", "size": "normal"},
             follow_redirects=True,
         )
     )
     assert "受付時間外です" in page
     with app.app_context():
         conn = db.connect(app.config["DB_PATH"])
-        assert db.rice_count(conn, "2026-08-20", "breakfast") == 0
+        assert db.rice_summary(conn, "2026-08-20", "breakfast") == (0, 0.0)
         conn.close()
 
 

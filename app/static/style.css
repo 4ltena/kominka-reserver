@@ -92,15 +92,6 @@ header {
 .grid th.time { width: 54px; color: var(--muted); padding: 4px 2px; font-size: 13px; }
 
 .cell { height: 42px; }
-
-.daybreak th {
-  padding: 3px 0;
-  font-size: 11px;
-  font-weight: normal;
-  color: var(--muted);
-  background: var(--fill);
-  letter-spacing: 0.2em;
-}
 .cell form { display: flex; align-items: center; justify-content: center; gap: 6px; height: 100%; }
 
 .cell.taken { background: var(--fill); }
@@ -144,22 +135,26 @@ button.link {
 .card.open { border-color: var(--fg); }
 .card.closed { background: var(--fill); }
 
-.btnwrap { margin: 0 0 4px; }
+.sizes { display: flex; gap: 10px; justify-content: center; }
+.sizes form { flex: 1; max-width: 150px; }
 
 .btn {
-  display: inline-block;
-  min-width: 160px;
-  min-height: 52px;
+  display: block;
+  width: 100%;
+  min-height: 56px;
   font-size: 17px;
+  line-height: 1.2;
   border: 1px solid var(--fg);
   border-radius: 8px;
-  padding: 12px 20px;
+  padding: 8px 12px;
 }
 
-.btn.small { min-width: 0; min-height: 40px; font-size: 15px; padding: 6px 16px; }
+.btn small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
 .btn.voted { background: var(--fg); color: var(--bg); }
+.btn.voted small { color: var(--bg); }
 
-.count { margin: 12px 0 0; font-size: 15px; }
+.count { margin: 14px 0 0; font-size: 22px; font-weight: 600; }
+.sub { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 
 .pick { display: flex; flex-wrap: wrap; gap: 8px; }
 .pick button.free { width: auto; min-width: 96px; border: 1px solid var(--line); color: var(--fg); padding: 10px 16px; }

@@ -7,7 +7,6 @@
     <table class="grid">
       <tbody>
         {% for row in column.rows %}
-        {% if row.daybreak %}<tr class="daybreak"><th colspan="2">翌日</th></tr>{% endif %}
         <tr>
           <th class="time">{{ row.slot }}</th>
           <td class="cell {{ row.state }}">

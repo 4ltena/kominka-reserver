@@ -19,6 +19,11 @@ SECTION_LABELS = {"morning": "朝", "night": "夜"}
 MEALS = ("breakfast", "dinner")
 MEAL_LABELS = {"breakfast": "朝", "dinner": "晩"}
 
+# 白米の量。合計の合数を炊く人が見る。
+RICE_SIZES = ("normal", "large")
+RICE_LABELS = {"normal": "通常", "large": "大盛"}
+RICE_GO = {"normal": 0.5, "large": 1.0}
+
 WEEKDAYS = ("月", "火", "水", "木", "金", "土", "日")
 
 # 滞在は 2026-08-17 の晩に始まり 2026-08-28 の朝に終わる。
