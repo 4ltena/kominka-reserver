@@ -88,26 +88,33 @@ def create_app(config_path=None, db_path=None, start_notifier: bool = True) -> F
         reserved = db.reservations_for_date(g.conn, day.isoformat())
         sections = []
         for section in slots.sections_for_date(day):
-            rows = []
-            for slot in slots.slot_starts(section):
-                cells = []
-                for room in config.ROOMS:
+            columns = []
+            for room in config.ROOMS:
+                rows = []
+                for slot in slots.slot_starts(section, room):
                     row = reserved.get((room, slot))
                     if row is None:
                         started = slots.slot_datetime(day, slot) <= now
-                        cells.append(
-                            {"room": room, "state": "past" if started else "free",
+                        rows.append(
+                            {"slot": slot, "state": "past" if started else "free",
                              "name": None, "rid": None}
                         )
                     else:
                         mine = member is not None and row["member_id"] == member["id"]
-                        cells.append(
-                            {"room": room, "state": "mine" if mine else "taken",
+                        rows.append(
+                            {"slot": slot, "state": "mine" if mine else "taken",
                              "name": row["name"], "rid": row["id"]}
                         )
-                rows.append({"slot": slot, "cells": cells})
+                columns.append(
+                    {
+                        "room": room,
+                        "label": config.ROOM_LABELS[room],
+                        "minutes": config.ROOM_SLOT_MINUTES[room],
+                        "rows": rows,
+                    }
+                )
             sections.append(
-                {"key": section, "label": config.SECTION_LABELS[section], "rows": rows}
+                {"key": section, "label": config.SECTION_LABELS[section], "columns": columns}
             )
         tabs = [
             {"value": d.isoformat(), "label": slots.format_day(d), "current": d == day}
@@ -189,7 +196,7 @@ def create_app(config_path=None, db_path=None, start_notifier: bool = True) -> F
         if day is None or room not in config.ROOMS:
             flash(MESSAGES["bad_slot"])
             return redirect(url_for("bath"))
-        reason = slots.check_reservable(day, section, slot, now)
+        reason = slots.check_reservable(day, section, room, slot, now)
         if reason != "ok":
             flash(MESSAGES[reason])
             return redirect(url_for("bath", date=day.isoformat()))

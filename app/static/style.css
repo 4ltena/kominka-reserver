@@ -67,7 +67,19 @@ header {
 
 .section { font-size: 15px; margin: 20px 0 6px; font-weight: 600; }
 
-.grid { width: 100%; border-collapse: collapse; }
+.rooms { display: flex; gap: 10px; align-items: flex-start; }
+.room { flex: 1; min-width: 0; }
+
+.room h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.room h3 small { display: block; font-weight: normal; color: var(--muted); font-size: 12px; }
+
+.grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
 
 .grid th, .grid td {
   border: 1px solid var(--line);
@@ -77,11 +89,9 @@ header {
   font-size: 14px;
 }
 
-.grid thead th { padding: 6px 2px; color: var(--muted); }
+.grid th.time { width: 54px; color: var(--muted); padding: 4px 2px; font-size: 13px; }
 
-.grid th.time { width: 62px; color: var(--muted); padding: 6px 2px; }
-
-.cell { height: 46px; }
+.cell { height: 42px; }
 .cell form { display: flex; align-items: center; justify-content: center; gap: 6px; height: 100%; }
 
 .cell.taken { background: var(--fill); }

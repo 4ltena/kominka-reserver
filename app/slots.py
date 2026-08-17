@@ -7,14 +7,16 @@ from datetime import date, datetime, timedelta
 from . import config
 
 
-def slot_starts(section: str) -> tuple[str, ...]:
+def slot_starts(section: str, room: str) -> tuple[str, ...]:
+    """枠の長さは浴室ごとに違うため、開始時刻の並びも浴室ごとに変わる。"""
     start_hour, end_hour = config.SECTION_HOURS[section]
+    step = config.ROOM_SLOT_MINUTES[room]
     starts = []
     minute = start_hour * 60
     end = end_hour * 60
     while minute < end:
         starts.append(f"{minute // 60:02d}:{minute % 60:02d}")
-        minute += config.SLOT_MINUTES
+        minute += step
     return tuple(starts)
 
 
@@ -37,9 +39,11 @@ def selectable_dates(now: datetime) -> list[date]:
     return [d for d in (today, today + timedelta(days=1)) if sections_for_date(d)]
 
 
-def check_reservable(day: date, section: str, slot: str, now: datetime) -> str:
+def check_reservable(day: date, section: str, room: str, slot: str, now: datetime) -> str:
     """予約できるなら "ok"、できないなら理由を返す。"""
-    if section not in config.SECTIONS or slot not in slot_starts(section):
+    if section not in config.SECTIONS or room not in config.ROOMS:
+        return "bad_slot"
+    if slot not in slot_starts(section, room):
         return "bad_slot"
     if not section_in_period(section, day):
         return "out_of_period"
