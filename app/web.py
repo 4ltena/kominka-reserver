@@ -79,7 +79,12 @@ def create_app(config_path=None, db_path=None) -> Flask:
 
     def default_bath_date(now) -> date:
         selectable = slots.selectable_dates(now)
-        return selectable[0] if selectable else now.date()
+        if not selectable:
+            return slots.stay_date(now)
+        for day in selectable:
+            if slots.has_open_slot(day, now):
+                return day
+        return selectable[0]
 
     def bath_context(day: date, now, member):
         reserved = db.reservations_for_date(g.conn, day.isoformat())
@@ -88,19 +93,23 @@ def create_app(config_path=None, db_path=None) -> Flask:
             columns = []
             for room in config.ROOMS:
                 rows = []
+                crossed = False
                 for slot in slots.slot_starts(section, room):
+                    # 24 時をまたぐ最初の枠に印を付け、表に区切りを入れる。
+                    daybreak = not crossed and int(slot[:2]) >= 24
+                    crossed = crossed or daybreak
                     row = reserved.get((room, slot))
                     if row is None:
                         started = slots.slot_datetime(day, slot) <= now
                         rows.append(
                             {"slot": slot, "state": "past" if started else "free",
-                             "name": None, "rid": None}
+                             "name": None, "rid": None, "daybreak": daybreak}
                         )
                     else:
                         mine = member is not None and row["member_id"] == member["id"]
                         rows.append(
                             {"slot": slot, "state": "mine" if mine else "taken",
-                             "name": row["name"], "rid": row["id"]}
+                             "name": row["name"], "rid": row["id"], "daybreak": daybreak}
                         )
                 columns.append(
                     {

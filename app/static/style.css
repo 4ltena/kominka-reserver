@@ -92,6 +92,15 @@ header {
 .grid th.time { width: 54px; color: var(--muted); padding: 4px 2px; font-size: 13px; }
 
 .cell { height: 42px; }
+
+.daybreak th {
+  padding: 3px 0;
+  font-size: 11px;
+  font-weight: normal;
+  color: var(--muted);
+  background: var(--fill);
+  letter-spacing: 0.2em;
+}
 .cell form { display: flex; align-items: center; justify-content: center; gap: 6px; height: 100%; }
 
 .cell.taken { background: var(--fill); }

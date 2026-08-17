@@ -46,9 +46,26 @@ def slot_datetime(day: date, slot: str) -> datetime:
     return datetime(day.year, day.month, day.day, hour, minute, tzinfo=config.TZ)
 
 
+def stay_date(now: datetime) -> date:
+    """深夜は前夜の続きとして扱う。夜の枠が翌 01:20 まで伸びるため。"""
+    if now.hour < config.DAY_CHANGE_HOUR:
+        return now.date() - timedelta(days=1)
+    return now.date()
+
+
 def selectable_dates(now: datetime) -> list[date]:
-    today = now.date()
+    today = stay_date(now)
     return [d for d in (today, today + timedelta(days=1)) if sections_for_date(d)]
+
+
+def has_open_slot(day: date, now: datetime) -> bool:
+    """その日にまだ始まっていない枠が 1 つでもあるか。"""
+    return any(
+        slot_datetime(day, slot) > now
+        for section in sections_for_date(day)
+        for room in config.ROOMS
+        for slot in slot_starts(section, room)
+    )
 
 
 def check_reservable(day: date, section: str, room: str, slot: str, now: datetime) -> str:
@@ -59,7 +76,8 @@ def check_reservable(day: date, section: str, room: str, slot: str, now: datetim
         return "bad_slot"
     if not section_in_period(section, day):
         return "out_of_period"
-    if day not in (now.date(), now.date() + timedelta(days=1)):
+    today = stay_date(now)
+    if day not in (today, today + timedelta(days=1)):
         return "not_selectable_date"
     if slot_datetime(day, slot) <= now:
         return "past"
