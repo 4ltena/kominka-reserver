@@ -1,3 +1,8 @@
+![License](https://img.shields.io/badge/license-MIT-green)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-C51A4A?logo=raspberrypi&logoColor=white)
+
 # furo-gohan
 
 インターンの共同生活で使う、風呂の枠予約と白米の挙手集計。LAN 内の Raspberry Pi に置き、各自のスマートフォンから開く。
@@ -37,13 +42,13 @@ python3 -m venv .venv
 Pi を同じ LAN に繋ぎ、SSH を有効にしてから実行する。
 
 ```sh
-./deploy.sh
+PI_PASS='<Pi のパスワード>' ./deploy.sh
 ```
 
-既定では `raspberrypi.local` の `pi` ユーザーへ、パスワード `xxxx` で入る。変えるときは環境変数で渡す。回線が不安定なときは IP を直に指定した方が確実。
+既定の宛先は `raspberrypi.local` の `pi` ユーザー。パスワードは既定値を持たないので必ず渡す。回線が不安定なときは IP を直に指定した方が確実。
 
 ```sh
-PI_HOST=192.168.0.117 PI_USER=pi PI_PASS=... ./deploy.sh
+PI_HOST=192.168.0.10 PI_USER=pi PI_PASS='<パスワード>' ./deploy.sh
 ```
 
 転送、仮想環境の作成、依存の導入、時刻帯の設定、systemd への登録、起動確認までを行う。何度流しても結果は変わらず、`data/` と `config.toml` は上書きしない。転送と `apt-get` と pip は 3 回まで再試行するので、無線が不安定でも 1 回の切断では止まらない。配置後は `http://raspberrypi.local:8080/` で開く。

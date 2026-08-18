@@ -5,7 +5,8 @@ set -euo pipefail
 
 PI_HOST="${PI_HOST:-raspberrypi.local}"
 PI_USER="${PI_USER:-pi}"
-PI_PASS="${PI_PASS:-xxxx}"
+# パスワードは既定値を持たない。環境変数で渡すか、鍵認証を使う。
+PI_PASS="${PI_PASS:-}"
 APP_DIR="${APP_DIR:-/home/${PI_USER}/furo-gohan}"
 SERVICE=furo-gohan
 
@@ -19,6 +20,18 @@ SSH_OPTS=(
   -o PreferredAuthentications=password
   -o PubkeyAuthentication=no
 )
+
+if [ -z "$PI_PASS" ]; then
+  cat >&2 <<'USAGE'
+PI_PASS が空。次のいずれかで実行する。
+
+  PI_PASS='<Pi のパスワード>' ./deploy.sh
+  PI_HOST=192.168.0.10 PI_PASS='<パスワード>' ./deploy.sh
+
+鍵認証を設定済みなら sshpass は不要なので、この確認ごと外してよい。
+USAGE
+  exit 1
+fi
 
 if ! command -v sshpass >/dev/null 2>&1; then
   echo "sshpass が要る。brew install hudochenkov/sshpass/sshpass" >&2
