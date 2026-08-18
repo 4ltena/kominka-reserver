@@ -443,7 +443,7 @@ def test_send_pending_keeps_record_on_failure(conn):
 
 **Interfaces:**
 - `run.py` は `create_app()` を作り `settings.host` と `settings.port` で待ち受ける。
-- `deploy.sh` は環境変数 `PI_HOST`（既定 `raspi`）、`PI_USER`（既定 `pi`）、`PI_PASS`（既定 `xxxx`）を読み、`sshpass` 経由で配置する。
+- `deploy.sh` は環境変数 `PI_HOST`（既定 `raspberrypi.local`）、`PI_USER`（既定 `pi`）、`PI_PASS`（既定値なし）を読み、`sshpass` 経由で配置する。
 
 - [ ] **Step 1: `run.py` と systemd の設定を書く**
 - [ ] **Step 2: `deploy.sh` を書く** — 接続確認、`rsync` か `tar` での転送、`python3-venv` の導入、仮想環境の作成、依存の導入、`config.toml` が無い場合だけ雛形を置く、サービスの設置と起動、最後に `curl` で応答を確かめる。`data/` と `config.toml` は上書きしない。
