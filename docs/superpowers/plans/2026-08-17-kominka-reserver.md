@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11 / Flask / SQLite / 標準ライブラリの urllib.request / pytest
 
-**Spec:** `docs/superpowers/specs/2026-08-17-furo-gohan-design.md`
+**Spec:** `docs/superpowers/specs/2026-08-17-kominka-reserver-design.md`
 
 ## Global Constraints
 
@@ -40,7 +40,7 @@
 | `tests/` | pytest |
 | `run.py` | 起動口 |
 | `deploy.sh` | Pi への配置 |
-| `furo-gohan.service` | systemd の設定 |
+| `kominka-reserver.service` | systemd の設定 |
 
 ---
 
@@ -438,7 +438,7 @@ def test_send_pending_keeps_record_on_failure(conn):
 ### Task 12: 起動口と Pi への配置
 
 **Files:**
-- Create: `run.py`, `furo-gohan.service`, `deploy.sh`, `README.md`
+- Create: `run.py`, `kominka-reserver.service`, `deploy.sh`, `README.md`
 - Modify: `docs/` に配置手順
 
 **Interfaces:**

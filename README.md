@@ -3,7 +3,7 @@
 ![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-C51A4A?logo=raspberrypi&logoColor=white)
 
-# furo-gohan
+# kominka-reserver
 
 インターンの共同生活で使う、風呂の枠予約と白米の挙手集計。LAN 内の Raspberry Pi に置き、各自のスマートフォンから開く。
 
@@ -58,9 +58,9 @@ PI_HOST=192.168.0.10 PI_USER=pi PI_PASS='<パスワード>' ./deploy.sh
 状態の確認と再起動は Pi 上で行う。
 
 ```sh
-sudo systemctl status furo-gohan
-journalctl -u furo-gohan -n 50 --no-pager
-sudo systemctl restart furo-gohan
+sudo systemctl status kominka-reserver
+journalctl -u kominka-reserver -n 50 --no-pager
+sudo systemctl restart kominka-reserver
 ```
 
 ## 名簿を変える
@@ -68,7 +68,7 @@ sudo systemctl restart furo-gohan
 画面からは編集できない。Pi 上で操作する。
 
 ```sh
-cd ~/furo-gohan
+cd ~/kominka-reserver
 .venv/bin/python roster.py list
 .venv/bin/python roster.py add そら
 .venv/bin/python roster.py hide そら
@@ -105,4 +105,4 @@ PERIOD = {
 | `roster.py` | 名簿の追加と非表示 |
 | `deploy.sh` | Pi への配置 |
 
-設計は `docs/superpowers/specs/2026-08-17-furo-gohan-design.md` にある。
+設計は `docs/superpowers/specs/2026-08-17-kominka-reserver-design.md` にある。

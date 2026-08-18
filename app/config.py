@@ -54,7 +54,7 @@ VOTE_DEADLINE = {
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = ROOT / "config.toml"
-DEFAULT_DB_PATH = ROOT / "data" / "furo-gohan.db"
+DEFAULT_DB_PATH = ROOT / "data" / "kominka-reserver.db"
 
 
 @dataclass(frozen=True)

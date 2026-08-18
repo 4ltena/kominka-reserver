@@ -7,8 +7,8 @@ PI_HOST="${PI_HOST:-raspberrypi.local}"
 PI_USER="${PI_USER:-pi}"
 # パスワードは既定値を持たない。環境変数で渡すか、鍵認証を使う。
 PI_PASS="${PI_PASS:-}"
-APP_DIR="${APP_DIR:-/home/${PI_USER}/furo-gohan}"
-SERVICE=furo-gohan
+APP_DIR="${APP_DIR:-/home/${PI_USER}/kominka-reserver}"
+SERVICE=kominka-reserver
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # 回線が不安定な環境でも切れにくいようにする。
@@ -63,11 +63,30 @@ retry() {
 echo "==> 接続確認 ${PI_USER}@${PI_HOST}"
 run true
 
+# 旧名 furo-gohan で配置済みなら引き継ぐ。データベースと設定は残す。
+# 全機で移行が済んだらこの節ごと消してよい。
+OLD_DIR="/home/${PI_USER}/furo-gohan"
+if run "test -d '${OLD_DIR}'"; then
+  echo "==> 旧名 furo-gohan からの移行"
+  run_sudo "systemctl disable --now furo-gohan 2>/dev/null || true"
+  run_sudo "rm -f /etc/systemd/system/furo-gohan.service"
+  run "mkdir -p '${APP_DIR}'"
+  run "test -d '${OLD_DIR}/data' && cp -a '${OLD_DIR}/data' '${APP_DIR}/' || true"
+  run "test -f '${OLD_DIR}/config.toml' && cp -a '${OLD_DIR}/config.toml' '${APP_DIR}/' || true"
+  run "test -f '${APP_DIR}/data/furo-gohan.db' && mv '${APP_DIR}/data/furo-gohan.db' '${APP_DIR}/data/kominka-reserver.db' || true"
+  for suffix in wal shm; do
+    run "test -f '${APP_DIR}/data/furo-gohan.db-${suffix}' && mv '${APP_DIR}/data/furo-gohan.db-${suffix}' '${APP_DIR}/data/kominka-reserver.db-${suffix}' || true"
+  done
+  run "mv '${OLD_DIR}' '${OLD_DIR}.bak'"
+  run_sudo "systemctl daemon-reload"
+  echo "    旧ディレクトリは ${OLD_DIR}.bak に残した"
+fi
+
 echo "==> ファイルの転送"
 run "mkdir -p '${APP_DIR}'"
 send() {
   tar --exclude '__pycache__' -czf - -C "$HERE" \
-      app run.py roster.py requirements.txt config.example.toml furo-gohan.service \
+      app run.py roster.py requirements.txt config.example.toml kominka-reserver.service \
     | sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}" \
         "tar -xzf - -C '${APP_DIR}'"
 }
@@ -89,7 +108,7 @@ run_sudo "timedatectl set-timezone Asia/Tokyo"
 
 echo "==> systemd サービスの設置"
 run "sed -e 's|__USER__|${PI_USER}|g' -e 's|__APP_DIR__|${APP_DIR}|g' \
-      '${APP_DIR}/furo-gohan.service' > /tmp/${SERVICE}.service"
+      '${APP_DIR}/kominka-reserver.service' > /tmp/${SERVICE}.service"
 run_sudo "cp /tmp/${SERVICE}.service /etc/systemd/system/${SERVICE}.service"
 run_sudo "systemctl daemon-reload"
 run_sudo "systemctl enable ${SERVICE}"
