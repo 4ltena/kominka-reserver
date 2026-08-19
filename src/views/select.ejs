@@ -1,0 +1,10 @@
+<h2 class="section">名前を選ぶ</h2>
+<% if (members.length === 0) { %>
+<p class="empty">名簿が空です。</p>
+<% } else { %>
+<form method="post" action="/select" class="pick">
+  <% for (const m of members) { %>
+  <button type="submit" name="member_id" value="<%= m.id %>" class="free"><%= m.name %></button>
+  <% } %>
+</form>
+<% } %>

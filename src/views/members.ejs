@@ -1,0 +1,9 @@
+<h2 class="section">名簿</h2>
+<ul class="members">
+  <% if (members.length === 0) { %>
+  <li class="empty">名簿が空です。</li>
+  <% } %>
+  <% for (const m of members) { %>
+  <li><span><%= m.name %></span></li>
+  <% } %>
+</ul>

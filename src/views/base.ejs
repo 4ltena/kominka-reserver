@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>風呂・ごはん</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-fragment="<%= fragment %>">
+
+<header>
+  <nav class="tabs">
+    <a href="/bath" class="<%= tab === 'bath' ? 'on' : '' %>">風呂</a>
+    <a href="/meals" class="<%= tab === 'meals' ? 'on' : '' %>">ごはん</a>
+  </nav>
+  <p class="who">
+    <%= member ? member.name : '名前未選択' %>
+    <a href="/select">変更</a>
+  </p>
+</header>
+
+<% if (notice) { %>
+<ul class="flash"><li><%= notice %></li></ul>
+<% } %>
+
+<main><%- body %></main>
+
+<footer><a href="/members">名簿</a></footer>
+
+<script>
+(function () {
+  var url = document.body.dataset.fragment;
+  var live = document.getElementById('live');
+  if (!url || !live) { return; }
+  setInterval(function () {
+    fetch(url, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) { if (html !== null) { live.innerHTML = html; } })
+      .catch(function () {});
+  }, 10000);
+})();
+</script>
+</body>
+</html>

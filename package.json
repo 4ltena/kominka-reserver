@@ -1,0 +1,21 @@
+{
+  "name": "kominka-reserver",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "古民家での共同生活で使う、風呂の枠予約と白米の集計",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test \"test/**/*.test.js\"",
+    "roster": "node roster.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "ejs": "^3.1.10",
+    "express": "^5.1.0"
+  }
+}

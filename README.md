@@ -1,11 +1,11 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-3.x-000000?logo=flask&logoColor=white)
+![Node](https://img.shields.io/badge/Node-20%2B-5FA04E?logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5.x-000000?logo=express&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-C51A4A?logo=raspberrypi&logoColor=white)
 
 # kominka-reserver
 
-古民家での共同生活で使う、風呂の枠予約と白米の集計。LAN 内の Raspberry Pi 上で動く Flask アプリ。
+古民家での共同生活で使う、風呂の枠予約と白米の集計。LAN 内の Raspberry Pi 上で動く Express アプリ。
 
 - **風呂** — 浴槽なし 15 分、浴槽付き 20 分の枠を先着順で取る。朝 06:00〜08:00、夜 19:00〜25:00 開始。今日と明日の分だけ、朝 1 枠と夜 1 枠まで。
 - **ごはん** — 白米の必要量を「通常」0.5 合と「大盛」1 合で挙手し、合計の合数を出す。
@@ -133,19 +133,38 @@ rice_votes        (id, date, meal, member_id, size, created_at)
 ## 動かす
 
 ```sh
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python run.py        # http://127.0.0.1:8080/
-.venv/bin/python -m pytest
+npm install
+npm start                      # http://127.0.0.1:8080/
+npm test
 ```
 
-名簿は画面から編集できない。`roster.py list|add|hide|show <名前>` を使う。
+名簿は画面から編集できない。`node roster.js list|add|hide|show <名前>` を使う。
 
 Raspberry Pi へ置くときは `PI_PASS='<パスワード>' ./deploy.sh`。転送から systemd への登録まで一度に行い、`data/` と `config.toml` は上書きしない。
 
+## 実装
+
+もとは Flask で書き、Raspberry Pi の実行環境を Node に寄せるため Express へ移した。
+移行の最中なので Python 版が `app/` と `tests/` に残っている。**Pi で動いているのは
+まだ Python 版**であり、切り替えは同じデータベースを見せて並走させたうえで行う。
+データベースのファイルもスキーマも URL も API の契約も変わらない。
+
+```
+src/jst.js       日本標準時。夏時間が無いので +09:00 の固定オフセットとして扱う
+src/slots.js     風呂の枠と可否。現在時刻は引数で受け取り、DB には触れない
+src/meals.js     食事と締切
+src/db.js        SQLite。先着順と 1 人 1 枠は一意制約が守る
+src/api.js       /api/v1
+src/web.js       画面
+```
+
+移植が正しいことは、両方の版へ同じ入力を流して確かめている。`tools/dump.py` と
+`tools/dump.mjs` が純関数の出力を突き合わせ、`tools/api-differential.mjs` は
+2 つのサーバを同時に立てて応答そのものを比べる。
+
 ## 設定
 
-`app/config.py` に日程と時間の設定がまとまっている。
+`src/config.js` に日程と時間の設定がまとまっている。
 
 | 名前 | 意味 |
 | --- | --- |

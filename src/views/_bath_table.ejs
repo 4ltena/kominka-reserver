@@ -1,0 +1,44 @@
+<% if (sections.length === 0) { %>
+<p class="empty">この日は対象期間外です。</p>
+<% } %>
+<% for (const section of sections) { %>
+<h2 class="section"><%= section.label %></h2>
+<div class="rooms">
+  <% for (const column of section.columns) { %>
+  <div class="room">
+    <h3><%= column.label %><small><%= column.minutes %>分</small></h3>
+    <table class="grid">
+      <tbody>
+        <% for (const row of column.rows) { %>
+        <tr>
+          <th class="time"><%= row.slot %></th>
+          <td class="cell <%= row.state %>">
+            <% if (row.state === 'free') { %>
+            <form method="post" action="/bath/reserve">
+              <input type="hidden" name="date" value="<%= dayValue %>">
+              <input type="hidden" name="section" value="<%= section.key %>">
+              <input type="hidden" name="room" value="<%= column.room %>">
+              <input type="hidden" name="slot" value="<%= row.slot %>">
+              <button type="submit" class="free">空き</button>
+            </form>
+            <% } else if (row.state === 'mine') { %>
+            <form method="post" action="/bath/cancel">
+              <input type="hidden" name="date" value="<%= dayValue %>">
+              <input type="hidden" name="reservation_id" value="<%= row.rid %>">
+              <span class="me"><%= row.name %></span>
+              <button type="submit" class="cancel">取消</button>
+            </form>
+            <% } else if (row.state === 'taken') { %>
+            <span class="taken"><%= row.name %></span>
+            <% } else { %>
+            <span class="past">—</span>
+            <% } %>
+          </td>
+        </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+  <% } %>
+</div>
+<% } %>
