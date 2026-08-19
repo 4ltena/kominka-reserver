@@ -22,31 +22,104 @@
 
 時刻はすべて Asia/Tokyo。締切時刻ちょうどは締切済として扱う。
 
-## データを読む
+## API
 
-SQLite ファイル 1 つに全部入っている。パスは `data/kominka-reserver.db`（Pi では `~/kominka-reserver/data/`）。読むだけなら別プロセスから開いてよい。
+`/api/v1/` に JSON で置いてある。認証は無い。締切や先着順の判定は画面と同じ規則で動く。日時はすべて `+09:00` 付きで返る。
+
+| | |
+| --- | --- |
+| `GET /api/v1/members` | 名簿 |
+| `GET /api/v1/meals` | 直近 4 件。`?all=true` で期間内の全食事 |
+| `GET /api/v1/meals/<date>/<meal>` | 1 食分 |
+| `POST /api/v1/meals/<date>/<meal>/vote` | `{"member_id":1,"size":"large"}` |
+| `DELETE /api/v1/meals/<date>/<meal>/vote` | `{"member_id":1}` |
+| `GET /api/v1/bath/<date>` | その日の枠と予約者 |
+| `POST /api/v1/bath/<date>/reserve` | `{"member_id":1,"section":"night","room":"shower","slot":"19:00"}` |
+| `DELETE /api/v1/bath/reservations/<id>` | `{"member_id":1}` |
+
+`<meal>` は `breakfast` / `dinner`、`<date>` は `YYYY-MM-DD`。引数は JSON 本体でもフォームでもクエリ文字列でも受ける。`DELETE` に本体を付けられない client は `?member_id=1` でよい。
+
+### 名簿
+
+```json
+{"members": [{"id": 1, "name": "あかり"}], "registered": 23}
+```
+
+`id` がそのまま `member_id` になる。Slack の利用者との対応は bot 側で持つ。
+
+### ごはん
+
+1 食分はこの形で、`/api/v1/meals` はこれを `{"now": "...", "meals": [...]}` に包んで返す。
+
+```json
+{"date":"2026-08-20","meal":"dinner","state":"open",
+ "deadline":"2026-08-20T18:00:00+09:00",
+ "go":1.5,"people":2,"registered":3,
+ "by_size":{"normal":1,"large":1}}
+```
+
+`state` は `open` か `closed`。`go` が炊く合数、`people` は挙手した人数、`registered` は名簿の人数。投票と取り消しが成功すると更新後の同じ形が返るため、読み直さなくてよい。取り消しは挙手していなくても成功として返るので、何度呼んでも結果は変わらない。
+
+### 風呂
+
+`GET /api/v1/bath/<date>` は区分と浴室で入れ子になった枠を返す。
+
+```json
+{"date":"2026-08-20","now":"2026-08-20T12:00:00+09:00","selectable":true,
+ "sections":[{"section":"night","rooms":[{"room":"shower","minutes":15,
+   "slots":[{"slot":"19:00","starts_at":"2026-08-20T19:00:00+09:00",
+             "state":"free","reservable":true,
+             "member_id":null,"name":null,"reservation_id":null}]}]}]}
+```
+
+`state` は `free` / `taken` / `past` で、埋まっていれば `name` と `reservation_id` が入る。**予約に進んでよいかは `state` ではなく `reservable` を見る。** 期間内でも受け付けるのは今日と明日だけなので、それより先の日の空き枠は `state` が `free` のまま `reservable` が `false` になる。日ごとの可否は `selectable`。
+
+予約が成立すると 201 とともに次が返る。取り消しに使う `reservation_id` はここか枠の一覧から取る。
+
+```json
+{"reservation_id":12,"date":"2026-08-20","section":"night",
+ "room":"shower","slot":"19:00","starts_at":"2026-08-20T19:00:00+09:00",
+ "member_id":1,"name":"あかり"}
+```
+
+### 失敗
+
+状態コードと機械可読な `error` を返す。画面の日本語文言とは分離してあるので、文面を変えても壊れない。経路や method を間違えたときも HTML ではなく `not_found` / `method_not_allowed` の JSON が返る。
+
+| `error` | 状態 | 意味 |
+| --- | --- | --- |
+| `bad_request` | 400 | `member_id` が無いなど。`detail` に理由が入る |
+| `bad_slot` | 400 | 知らない浴室、区分に無い時刻 |
+| `bad_size` | 400 | `normal` / `large` 以外 |
+| `unknown_member` | 404 | 名簿に無い |
+| `unknown_meal` | 404 | 期間外の食事 |
+| `unknown_reservation` | 404 | 無いか、他人の予約 |
+| `not_in_period` | 404 | 期間外の日 |
+| `not_found` | 404 | 知らない経路 |
+| `method_not_allowed` | 405 | method が違う |
+| `not_selectable_date` | 409 | 今日と明日以外 |
+| `slot_started` | 409 | 開始時刻を過ぎた |
+| `slot_taken` | 409 | 先に取られた |
+| `already_has` | 409 | その区分で予約済み。`held` に中身が入る |
+| `deadline_passed` | 409 | 締切後。`deadline` が入る |
+
+## データを直接読む
+
+API を通さず SQLite を開いてもよい。パスは `data/kominka-reserver.db`（Pi では `~/kominka-reserver/data/`）。
 
 ```sql
-members         (id, name, active, created_at)
+members           (id, name, active, created_at)
 bath_reservations (id, date, section, room, slot, member_id, created_at)
-rice_votes      (id, date, meal, member_id, size, created_at)
+rice_votes        (id, date, meal, member_id, size, created_at)
 ```
 
 - `date` は `YYYY-MM-DD`、`slot` は `HH:MM`。**`24:00` と `25:00` は翌日の 00:00 と 01:00** を指し、枠は入浴を始めた夜の日付に属する。
 - `section` は `morning` / `night`、`room` は `shower`（風呂）/ `tub`（風呂・浴槽付き）。
 - `meal` は `breakfast` / `dinner`、`size` は `normal`（0.5 合）/ `large`（1 合）。
 
-ある食事の合計を出す例。
+書き込みは API 経由を勧める。先着順と 1 人 1 枠は一意制約が守っているため、直接 INSERT すると制約違反を自前で捌く必要がある。
 
-```sql
-SELECT SUM(CASE size WHEN 'large' THEN 1.0 ELSE 0.5 END) AS go,
-       COUNT(*) AS people
-FROM rice_votes WHERE date = '2026-08-20' AND meal = 'dinner';
-```
-
-Python から使うなら `app/db.py` の `rice_summary()` と `reservations_for_date()` がそのまま呼べる。締切や枠の判定は `app/meals.py` と `app/slots.py` にあり、どちらも現在時刻を引数で受け取る純粋関数なので DB に触れずに試せる。
-
-## 画面
+## 画面（人が使う側）
 
 | 経路 | 内容 |
 | --- | --- |
@@ -55,7 +128,7 @@ Python から使うなら `app/db.py` の `rice_summary()` と `reservations_for
 | `/members` | 名簿の一覧（読み取り専用） |
 | `/fragment/bath`, `/fragment/meals` | 表とカードの断片。10 秒ごとの自動更新に使う |
 
-書き込みは `/bath/reserve`、`/bath/cancel`、`/meals/vote`、`/meals/unvote` への通常のフォーム送信。JSON API は無い。
+書き込みは `/bath/reserve`、`/bath/cancel`、`/meals/vote`、`/meals/unvote` への通常のフォーム送信。API とは同じデータを見ている。
 
 ## 動かす
 

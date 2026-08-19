@@ -173,6 +173,19 @@ def rice_summary(conn, day: str, kind: str) -> tuple[int, float]:
     return people, total
 
 
+def rice_by_size(conn, day: str, kind: str) -> dict[str, int]:
+    """量ごとの人数。挙手が無い量も 0 で埋める。"""
+    counts = {size: 0 for size in RICE_GO}
+    rows = conn.execute(
+        "SELECT size, COUNT(*) AS n FROM rice_votes WHERE date = ? AND meal = ? GROUP BY size",
+        (day, kind),
+    )
+    for row in rows:
+        if row["size"] in counts:
+            counts[row["size"]] = int(row["n"])
+    return counts
+
+
 def member_vote(conn, day: str, kind: str, member_id: int) -> str | None:
     """その人が選んだ量。挙手していなければ None。"""
     row = conn.execute(

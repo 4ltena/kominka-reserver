@@ -12,7 +12,7 @@ from pathlib import Path
 
 from flask import Flask, flash, g, redirect, render_template, request, url_for
 
-from . import clock, config, db, meals, slots
+from . import api, clock, config, db, meals, slots
 from .meals import Meal
 
 COOKIE = "member_id"
@@ -51,6 +51,11 @@ def create_app(config_path=None, db_path=None) -> Flask:
     conn = db.connect(db_path)
     db.init_schema(conn)
     conn.close()
+
+    # 名簿の名前をそのまま読めるようにする。JSON の規格上 UTF-8 でよい。
+    app.json.ensure_ascii = False
+    app.register_blueprint(api.bp)
+    api.register_errors(app)
 
     @app.before_request
     def _open_db():
