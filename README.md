@@ -5,104 +5,83 @@
 
 # kominka-reserver
 
-インターンの共同生活で使う、風呂の枠予約と白米の挙手集計。LAN 内の Raspberry Pi に置き、各自のスマートフォンから開く。
+古民家での共同生活で使う、風呂の枠予約と白米の集計。LAN 内の Raspberry Pi 上で動く Flask アプリ。
 
-対象期間は 2026-08-17 の晩から 2026-08-28 の朝まで。
+- **風呂** — 浴槽なし 15 分、浴槽付き 20 分の枠を先着順で取る。朝 06:00〜08:00、夜 19:00〜25:00 開始。今日と明日の分だけ、朝 1 枠と夜 1 枠まで。
+- **ごはん** — 白米の必要量を「通常」0.5 合と「大盛」1 合で挙手し、合計の合数を出す。
+- **名簿** — パスワードなし。名前を選ぶと端末が Cookie で覚える。
 
-## 何ができるか
+## 締切
 
-**風呂タブ** — 浴槽なしの「風呂」と浴槽ありの「風呂（浴槽付き）」を予約する。枠の長さは浴室ごとに違い、浴槽なしが 15 分、浴槽付きが 20 分。時間帯は朝が 06:00 から 08:00、夜が 19:00 から 25:00。24 時以降の表記は翌日を指し、`25:00` は翌 01:00 になる。刻み幅が違うので時刻の行は揃わず、画面では浴室ごとの列として横に並ぶ。
+投票の受付開始は無く、締切だけがある。
 
-予約できるのは今日と明日の枠で、1 人が持てるのは同じ日の朝に 1 枠、夜に 1 枠まで。取り消しはいつでもできる。
+| 対象 | 締切 |
+| --- | --- |
+| D 日の朝ごはん | D-1 日 22:00 |
+| D 日の晩ごはん | D 日 18:00 |
 
-「今日」は暦の日付ではなく滞在の一晩を指す。夜の枠が翌 01:20 まで伸びるため、05:00 より前は前夜の続きとして扱う。0 時を回っても前夜のタブが残り、まだ始まっていない深夜の枠を取れる。境目は `DAY_CHANGE_HOUR` にある。
+時刻はすべて Asia/Tokyo。締切時刻ちょうどは締切済として扱う。
 
-同じ枠を 2 人が同時に押した場合、成立するのは 1 件だけになる。判定はデータベースの一意制約が行うため、確認と書き込みの隙に割り込まれることがない。
+## データを読む
 
-**ごはんタブ** — 必要な白米の量を挙手で集める。通常が 0.5 合、大盛が 1 合で、集計は合計の合数を出す。もう一方を押せば量を変えられる。締切は朝の分が前日 22:00、晩の分が当日 18:00。受付開始は無く、締切までならいつでも挙手できる。締切後は人数だけが残る。押していない状態を「要らない」として扱う。
+SQLite ファイル 1 つに全部入っている。パスは `data/kominka-reserver.db`（Pi では `~/kominka-reserver/data/`）。読むだけなら別プロセスから開いてよい。
 
-最初の食事は 8/18 の晩ごはん。8/18 の朝ごはんは投票窓が過ぎていたため対象外で、朝ごはんは 8/19 から始まる。
+```sql
+members         (id, name, active, created_at)
+bath_reservations (id, date, section, room, slot, member_id, created_at)
+rice_votes      (id, date, meal, member_id, size, created_at)
+```
 
-名前はパスワードなしで名簿から選び、端末が Cookie で覚える。名簿は画面からは編集できず、一覧を見るだけになっている。画面に出るのはこれだけで、設定や管理の類は置かない。
+- `date` は `YYYY-MM-DD`、`slot` は `HH:MM`。**`24:00` と `25:00` は翌日の 00:00 と 01:00** を指し、枠は入浴を始めた夜の日付に属する。
+- `section` は `morning` / `night`、`room` は `shower`（風呂）/ `tub`（風呂・浴槽付き）。
+- `meal` は `breakfast` / `dinner`、`size` は `normal`（0.5 合）/ `large`（1 合）。
 
-## 手元で動かす
+ある食事の合計を出す例。
+
+```sql
+SELECT SUM(CASE size WHEN 'large' THEN 1.0 ELSE 0.5 END) AS go,
+       COUNT(*) AS people
+FROM rice_votes WHERE date = '2026-08-20' AND meal = 'dinner';
+```
+
+Python から使うなら `app/db.py` の `rice_summary()` と `reservations_for_date()` がそのまま呼べる。締切や枠の判定は `app/meals.py` と `app/slots.py` にあり、どちらも現在時刻を引数で受け取る純粋関数なので DB に触れずに試せる。
+
+## 画面
+
+| 経路 | 内容 |
+| --- | --- |
+| `/bath` | 風呂の表。`?date=YYYY-MM-DD` |
+| `/meals` | ごはんのカード |
+| `/members` | 名簿の一覧（読み取り専用） |
+| `/fragment/bath`, `/fragment/meals` | 表とカードの断片。10 秒ごとの自動更新に使う |
+
+書き込みは `/bath/reserve`、`/bath/cancel`、`/meals/vote`、`/meals/unvote` への通常のフォーム送信。JSON API は無い。
+
+## 動かす
 
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python run.py
+.venv/bin/python run.py        # http://127.0.0.1:8080/
+.venv/bin/python -m pytest
 ```
 
-`http://127.0.0.1:8080/` を開く。最初に「名簿」で参加者を登録する。
+名簿は画面から編集できない。`roster.py list|add|hide|show <名前>` を使う。
 
-テストは `.venv/bin/python -m pytest` で走る。
+Raspberry Pi へ置くときは `PI_PASS='<パスワード>' ./deploy.sh`。転送から systemd への登録まで一度に行い、`data/` と `config.toml` は上書きしない。
 
-## Raspberry Pi へ置く
+## 設定
 
-Pi を同じ LAN に繋ぎ、SSH を有効にしてから実行する。
+`app/config.py` に日程と時間の設定がまとまっている。
 
-```sh
-PI_PASS='<Pi のパスワード>' ./deploy.sh
-```
-
-既定の宛先は `raspberrypi.local` の `pi` ユーザー。パスワードは既定値を持たないので必ず渡す。回線が不安定なときは IP を直に指定した方が確実。
-
-```sh
-PI_HOST=192.168.0.10 PI_USER=pi PI_PASS='<パスワード>' ./deploy.sh
-```
-
-転送、仮想環境の作成、依存の導入、時刻帯の設定、systemd への登録、起動確認までを行う。何度流しても結果は変わらず、`data/` と `config.toml` は上書きしない。転送と `apt-get` と pip は 3 回まで再試行するので、無線が不安定でも 1 回の切断では止まらない。配置後は `http://raspberrypi.local:8080/` で開く。
-
-`sshpass` が要る。入っていなければ `brew install hudochenkov/sshpass/sshpass` で入れる。
-
-状態の確認と再起動は Pi 上で行う。
-
-```sh
-sudo systemctl status kominka-reserver
-journalctl -u kominka-reserver -n 50 --no-pager
-sudo systemctl restart kominka-reserver
-```
-
-## 名簿を変える
-
-画面からは編集できない。Pi 上で操作する。
-
-```sh
-cd ~/kominka-reserver
-.venv/bin/python roster.py list
-.venv/bin/python roster.py add そら
-.venv/bin/python roster.py hide そら
-.venv/bin/python roster.py show そら
-```
-
-非表示にしても、その人の予約と投票は残る。
-
-## 日程を変える
-
-`app/config.py` の `PERIOD` に開始日と終了日をまとめてある。ここだけ書き換えれば全体が追随する。
-
-```python
-PERIOD = {
-    ("bath", "night"):     (date(2026, 8, 17), date(2026, 8, 27)),
-    ("bath", "morning"):   (date(2026, 8, 18), date(2026, 8, 28)),
-    ("meal", "breakfast"): (date(2026, 8, 18), date(2026, 8, 28)),
-    ("meal", "dinner"):    (date(2026, 8, 18), date(2026, 8, 27)),
-}
-```
-
-白米の量と合数は `RICE_GO`、浴室ごとの枠の長さは `ROOM_SLOT_MINUTES`、朝と夜の時間帯は `SECTION_HOURS`、夜の最終開始時刻は `SECTION_LAST_START`、深夜の日付の境目は `DAY_CHANGE_HOUR`、投票の締切は `VOTE_DEADLINE` にある。
-
-## 構成
-
-| ファイル | 役割 |
+| 名前 | 意味 |
 | --- | --- |
-| `app/config.py` | 期間、枠、設定ファイルの読み込み |
-| `app/clock.py` | 現在時刻の取得口。テストはここを差し替える |
-| `app/slots.py` | 風呂の枠生成と予約可否 |
-| `app/meals.py` | 食事の一覧と投票窓 |
-| `app/db.py` | SQLite の接続と問い合わせ |
-| `app/web.py` | Flask アプリとルーティング |
-| `roster.py` | 名簿の追加と非表示 |
-| `deploy.sh` | Pi への配置 |
+| `PERIOD` | 風呂と食事それぞれの開始日と終了日 |
+| `SECTION_HOURS` | 朝と夜の時間帯 |
+| `SECTION_LAST_START` | 夜の最終開始時刻 |
+| `ROOM_SLOT_MINUTES` | 浴室ごとの枠の長さ |
+| `DAY_CHANGE_HOUR` | 深夜を前夜として扱う境目（05:00） |
+| `VOTE_DEADLINE` | 食事ごとの締切 |
+| `RICE_GO` | 量から合数への換算 |
 
-設計は `docs/superpowers/specs/2026-08-17-kominka-reserver-design.md` にある。
+設計は `docs/superpowers/specs/` にある。
