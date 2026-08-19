@@ -22,9 +22,10 @@ node -v || sudo apt-get install -y nodejs
 
 ## 用意するもの
 
-**1. Slack の Incoming Webhook URL**
+**1. Slack の Incoming Webhook URL を浴室の数だけ**
 
-Slack アプリの Incoming Webhooks で発行する。権限は `incoming-webhook` の 1 つだけでよく、
+浴槽付き用と浴槽なし用で 2 本発行する。Incoming Webhook は 1 本が 1 チャンネルに固定される
+ため、投げ分けるには本数を分けるしかない。Slack アプリの Incoming Webhooks で発行する。権限は `incoming-webhook` の 1 つだけでよく、
 これは「指定した 1 チャンネルに投稿する」以外に何もできない。**URL 自体が鍵**なので、
 チャットに貼らない。漏れたら発行し直して古い方を消す。
 
@@ -54,7 +55,10 @@ Pi の上で設定を置く。
 
 ```sh
 cd ~/kominka-reserver
-echo 'SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...' > bot/webhook.env
+cat > bot/webhook.env <<'EOT'
+SLACK_WEBHOOK_URL_TUB=https://hooks.slack.com/services/...
+SLACK_WEBHOOK_URL_SHOWER=https://hooks.slack.com/services/...
+EOT
 chmod 600 bot/webhook.env
 vi bot/slack-users.json          # 対応表を書く
 ```
@@ -117,19 +121,23 @@ id を再利用するため、取り消しのあとに同じ id を得た予約�
 
 | | |
 | --- | --- |
-| `SLACK_WEBHOOK_URL` | 必須。`bot/webhook.env` に書く。unit ファイルに直書きしない |
+| `SLACK_WEBHOOK_URL_TUB` | 浴槽付きの通知先。`bot/webhook.env` に書く。unit ファイルに直書きしない |
+| `SLACK_WEBHOOK_URL_SHOWER` | 浴槽なしの通知先 |
+| `SLACK_WEBHOOK_URL` | 上の 2 つが無いときの共通の通知先。1 チャンネルで運用するとき用 |
 | `API_BASE` | 既定 `http://127.0.0.1:8080`。別の機体から動かすときだけ指定する |
 | `bot/slack-users.json` | 1 分ごとに読み直す。**書き換えに再起動は要らない** |
 | `bot/sent.json` | 自動で作られる。消さない |
 
 浴室の日本語名（`shower`→風呂、`tub`→風呂（浴槽付き））は API が返さないため bot が持って
-いる。`src/config.js` の `ROOM_LABELS` と一致することを `npm test` が確認する。
+いる。**`shower` が浴槽なしで、アプリの画面ではそれを「風呂」と呼ぶ。** 投稿先を割り当てる
+ときはここで取り違えやすい。`src/config.js` の `ROOM_LABELS` と一致することを `npm test` が確認する。
 
 ## 困ったとき
 
 | 症状 | 原因 |
 | --- | --- |
-| 起動直後に `SLACK_WEBHOOK_URL が URL になっていない` で落ちる | `webhook.env` の書式違い。`SLACK_WEBHOOK_URL=https://...` の 1 行。引用符も `< >` も要らない |
+| 起動直後に `投稿先が URL になっていない浴室` で落ちる | その浴室の行が `webhook.env` に無いか書式違い。`SLACK_WEBHOOK_URL_TUB=https://...` の形。引用符も `< >` も要らない |
+| 浴槽付きと浴槽なしが逆のチャンネルに出る | `_TUB` と `_SHOWER` の URL が入れ替わっている。アプリは浴槽なしを「風呂」と呼ぶため取り違えやすい |
 | `巡回に失敗 fetch failed` が続く | アプリが落ちている。`systemctl status kominka-reserver` を見る。bot は落ちずに次の分で復帰する |
 | 特定の人だけ通知が来ない | 対応表に無い（起動ログに名前が出る）、member ID の写し間違い、または本人が投稿先チャンネルに入っていない |
 | 名前が青くならず `@U01ABCD…` と出る | member ID が違う。Slack はこの誤りをエラーにせず、文字列のまま表示する |

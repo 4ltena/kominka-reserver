@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ROOM_LABELS, due, message } from "../bot/notify.js";
+import { ROOM_LABELS, due, message, pickWebhook } from "../bot/notify.js";
 
 // GET /api/v1/bath/2026-08-20 の応答から、判定に要る部分だけを写したもの。
 const TAKEN = {
@@ -77,4 +77,30 @@ test("浴室の名前は src/config.js と食い違っていない", async () =>
   // bot は Pi に src/ が無いため書き写している。写し間違いと、あとからの変更を拾う。
   const { ROOM_LABELS: app } = await import("../src/config.js");
   assert.deepEqual(ROOM_LABELS, app);
+});
+
+test("浴室ごとに投稿先を分けられる", () => {
+  const env = {
+    SLACK_WEBHOOK_URL_TUB: "https://hooks.slack.com/tub",
+    SLACK_WEBHOOK_URL_SHOWER: "https://hooks.slack.com/shower",
+  };
+  assert.equal(pickWebhook("tub", env), "https://hooks.slack.com/tub");
+  assert.equal(pickWebhook("shower", env), "https://hooks.slack.com/shower");
+});
+
+test("専用の投稿先が無ければ共通のものに落ちる", () => {
+  // 1 チャンネルで運用しているところが、この変更で壊れないこと。
+  const env = { SLACK_WEBHOOK_URL: "https://hooks.slack.com/all" };
+  assert.equal(pickWebhook("tub", env), "https://hooks.slack.com/all");
+  assert.equal(pickWebhook("shower", env), "https://hooks.slack.com/all");
+});
+
+test("投稿先の山括弧と前後の空白は落とす", () => {
+  // Slack から URL をコピーすると <...> で囲まれることがある。
+  const env = { SLACK_WEBHOOK_URL: " <https://hooks.slack.com/all> " };
+  assert.equal(pickWebhook("tub", env), "https://hooks.slack.com/all");
+});
+
+test("投稿先が無ければ空文字。起動時に弾ける形にする", () => {
+  assert.equal(pickWebhook("tub", {}), "");
 });

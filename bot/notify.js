@@ -8,6 +8,9 @@
  * 5 分あるため同じ枠が 5 回続けて条件を満たす。送信済みの鍵を持って弾く。
  *
  *     SLACK_WEBHOOK_URL='https://hooks.slack.com/...' node bot/notify.js
+ *
+ * 浴室ごとにチャンネルを分けるときは、共通の 1 本の代わりに SLACK_WEBHOOK_URL_TUB
+ *（浴槽付き）と SLACK_WEBHOOK_URL_SHOWER（浴槽なし）を使う。
  */
 
 import fs from "node:fs";
@@ -82,6 +85,20 @@ export function message(entry, users) {
   return `${who} あと5分で ${ROOM_LABELS[entry.room] ?? entry.room} ${entry.slot} です`;
 }
 
+/**
+ * その浴室の投稿先。浴室ごとに Slack のチャンネルが分かれているため、Webhook も浴室ごとに
+ * 持つ。Incoming Webhook は 1 本が 1 チャンネルに固定されるため、投げ分けるには本数を
+ * 分けるしかない。
+ *
+ * SLACK_WEBHOOK_URL_<TUB|SHOWER> を見て、無ければ共通の SLACK_WEBHOOK_URL に落ちる。
+ * 1 チャンネルで済ませたいときは後者だけ設定すればよい。
+ * Slack から貼ると <...> で囲まれることがあるので落とす。
+ */
+export function pickWebhook(room, env) {
+  const raw = env[`SLACK_WEBHOOK_URL_${room.toUpperCase()}`] ?? env.SLACK_WEBHOOK_URL ?? "";
+  return raw.trim().replace(/^<|>$/g, "");
+}
+
 // --- 外に触る部分 ---------------------------------------------------------
 
 function readJson(file, fallback) {
@@ -109,7 +126,7 @@ async function post(webhook, text) {
   if (!res.ok) throw new Error(`Slack ${res.status} ${await res.text()}`);
 }
 
-async function tick(webhook, sent) {
+async function tick(sent) {
   const now = Date.now();
   const today = stayDay(now);
   const days = (await Promise.all(
@@ -121,7 +138,7 @@ async function tick(webhook, sent) {
 
   for (const entry of due(days, now, sent)) {
     try {
-      await post(webhook, message(entry, users));
+      await post(pickWebhook(entry.room, process.env), message(entry, users));
       // 成功した鍵だけ記録する。失敗したものは窓が続く間に自然と再試行される。
       sent.add(entry.key);
       fs.writeFileSync(SENT_PATH, JSON.stringify([...sent]));
@@ -142,11 +159,12 @@ async function warnUnmapped() {
 }
 
 async function main() {
-  // Slack から貼ると <...> で囲まれることがある。落としたうえで、形を起動時に確かめる。
-  // 送信の瞬間まで誤りに気づけないと、原因を追うのに時間がかかる。
-  const webhook = (process.env.SLACK_WEBHOOK_URL ?? "").trim().replace(/^<|>$/g, "");
-  if (!webhook.startsWith("http")) {
-    console.error(`SLACK_WEBHOOK_URL が URL になっていない: ${webhook || "(空)"}`);
+  // 投稿先の形は起動時に確かめる。送信の瞬間まで誤りに気づけないと、原因を追いにくい。
+  const rooms = Object.keys(ROOM_LABELS);
+  const blank = rooms.filter((room) => !pickWebhook(room, process.env).startsWith("http"));
+  if (blank.length > 0) {
+    console.error(`投稿先が URL になっていない浴室: ${blank.join(", ")}`);
+    console.error("SLACK_WEBHOOK_URL_TUB / SLACK_WEBHOOK_URL_SHOWER か、共通の SLACK_WEBHOOK_URL を設定する");
     process.exit(1);
   }
 
@@ -157,7 +175,7 @@ async function main() {
   await warnUnmapped().catch((error) => console.error("名簿の確認に失敗", error.message));
 
   // 例外でループごと死なせない。アプリが落ちている間も次の分で復帰する。
-  const run = () => tick(webhook, sent).catch((error) => console.error("巡回に失敗", error.message));
+  const run = () => tick(sent).catch((error) => console.error("巡回に失敗", error.message));
   await run();
   setInterval(run, TICK_MS);
 }

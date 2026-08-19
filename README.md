@@ -147,19 +147,25 @@ Raspberry Pi へ置くときは `PI_PASS='<パスワード>' ./deploy.sh`。転�
 `bot/notify.js` が、予約した風呂の枠が始まる 5 分前に Slack の共有チャンネルで本人をメンションする。1 分ごとに `/api/v1/bath/<date>` を見に行くだけの独立したプロセスで、アプリには手を入れていない。API の契約が Flask 版と Express 版で同じなため、どちらが動いていても変更なしで働く。依存は増やさず Node 20 の `fetch` だけで動く。
 
 ```sh
-SLACK_WEBHOOK_URL='https://hooks.slack.com/services/...' node bot/notify.js
+export SLACK_WEBHOOK_URL_TUB='https://hooks.slack.com/services/...'
+export SLACK_WEBHOOK_URL_SHOWER='https://hooks.slack.com/services/...'
+node bot/notify.js
 ```
 
 | | |
 | --- | --- |
-| `SLACK_WEBHOOK_URL` | 必須。Slack アプリの Incoming Webhook で発行する。投稿先はここで固定される |
+| `SLACK_WEBHOOK_URL_TUB` | 浴槽付きの通知先。Slack アプリの Incoming Webhook で発行する |
+| `SLACK_WEBHOOK_URL_SHOWER` | 浴槽なしの通知先 |
+| `SLACK_WEBHOOK_URL` | 上の 2 つが無いときに使う共通の通知先。1 チャンネルで済ませるとき用 |
 | `API_BASE` | 既定 `http://127.0.0.1:8080` |
 | `bot/slack-users.json` | 名簿の名前 → Slack member ID。`slack-users.example.json` が見本。1 分ごとに読み直すので、動かしながら埋めてよい |
 | `bot/sent.json` | 送信済みの鍵。自動で作られる |
 
+浴室ごとに Slack のチャンネルが分かれているため、投稿先も浴室ごとに持つ。`_TUB` が浴槽の**ある**方。アプリの画面では浴槽なしを「風呂」と呼ぶため、Slack の #風呂 チャンネルがどちらを指すかは目で確かめてから割り当てる。
+
 メンションには member ID（`U01ABCD2EF`）が要る。表示名では通知が飛ばない。ID は Slack のプロフィール → その他 → 「メンバー ID をコピー」で取る。対応表に無い人は平文の名前で投稿する。名簿にいて対応表に無い人は起動時のログに出る。
 
-Pi では `bot/kominka-bot.service` を `kominka-reserver.service` と同じ手順で置く。`__USER__` と `__APP_DIR__` を置き換え、Webhook URL は `bot/webhook.env` に `SLACK_WEBHOOK_URL=...` の 1 行で置く。`deploy.sh` はまだ bot を転送しないため、手で送る。 配置から systemd への登録、確認と切り分けまでの手順は [docs/slack-bot-deploy.md](docs/slack-bot-deploy.md) にまとめてある。
+Pi では `bot/kominka-bot.service` を `kominka-reserver.service` と同じ手順で置く。`__USER__` と `__APP_DIR__` を置き換え、Webhook URL は `bot/webhook.env` に `SLACK_WEBHOOK_URL_TUB=...` と `SLACK_WEBHOOK_URL_SHOWER=...` の 2 行で置く。`deploy.sh` はまだ bot を転送しないため、手で送る。 配置から systemd への登録、確認と切り分けまでの手順は [docs/slack-bot-deploy.md](docs/slack-bot-deploy.md) にまとめてある。
 
 送信済みをファイルに残すのは、`Restart=always` で再起動したときに同じ枠へ投稿し続けるのを防ぐため。鍵は `date|room|slot|member_id` で、`reservation_id` は使わない。SQLite は削除された id を再利用するため、取り消しのあとに同じ id を得た予約へ通知が飛ばなくなる。
 ## 実装
