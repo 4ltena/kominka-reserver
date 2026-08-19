@@ -83,11 +83,11 @@ export function makeClient(base) {
 }
 
 /** 現在時刻を固定したアプリを立て、後片付けまで面倒を見る。 */
-export async function withApp(now, run) {
+export async function withApp(now, run, { basePath = "" } = {}) {
   const previous = clock.now;
   clock.now = () => now;
   const dir = tempDir();
-  const app = createApp({ dbPath: path.join(dir, "web.db") });
+  const app = createApp({ dbPath: path.join(dir, "web.db"), basePath });
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -103,13 +103,13 @@ export async function withApp(now, run) {
 }
 
 /** 名簿に 2 人入れ、1 人目として入った client を渡す。 */
-export function withSignedIn(now, run) {
+export function withSignedIn(now, run, options) {
   return withApp(now, async (context) => {
     const first = db.addMember(context.db, "あかり");
     db.addMember(context.db, "ゆうと");
     context.client.setCookie("member_id", String(first));
     await run(context);
-  });
+  }, options);
 }
 
 /** 名簿に 2 人入れただけの、cookie を持たない client。API のテストが使う。 */

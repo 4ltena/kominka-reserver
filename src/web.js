@@ -50,8 +50,10 @@ function readCookies(req) {
   for (const part of (req.headers.cookie ?? "").split(";")) {
     const at = part.indexOf("=");
     if (at < 0) continue;
+    const name = part.slice(0, at).trim();
+    if (name in out) continue;
     try {
-      out[part.slice(0, at).trim()] = decodeURIComponent(part.slice(at + 1).trim());
+      out[name] = decodeURIComponent(part.slice(at + 1).trim());
     } catch {
       // 壊れた cookie は無かったことにする。
     }
@@ -75,11 +77,16 @@ function readNotice(raw) {
   );
 }
 
-const setNotice = (res, code) =>
-  res.cookie(NOTICE, code, { maxAge: NOTICE_MAX_AGE, sameSite: "lax", path: "/" });
+const setNotice = (res, code, cookiePath) =>
+  res.cookie(NOTICE, code, { maxAge: NOTICE_MAX_AGE, sameSite: "lax", path: cookiePath });
 
-export function createWebRouter(database) {
+export function createWebRouter(database, basePath = "") {
   const router = express.Router({ strict: true });
+
+  // 自分がぶら下がっている位置を付けた行き先。転送も画面の中のリンクもこれを通す。
+  const u = (path) => `${basePath}${path}`;
+  const cookiePath = basePath === "" ? "/" : basePath;
+  const flash = (res, code) => setNotice(res, code, cookiePath);
   router.use(express.urlencoded({ extended: false, limit: "64kb" }));
 
   // --- 補助 ---------------------------------------------------------------
@@ -93,11 +100,12 @@ export function createWebRouter(database) {
   async function page(req, res, name, locals) {
     const cookies = readCookies(req);
     const notice = readNotice(cookies[NOTICE]);
-    if (cookies[NOTICE] !== undefined) res.clearCookie(NOTICE, { path: "/" });
+    if (cookies[NOTICE] !== undefined) res.clearCookie(NOTICE, { path: cookiePath });
 
     const data = {
       config,
       formatGo,
+      base: basePath,
       member: currentMember(req),
       notice,
       tab: "",
@@ -109,7 +117,9 @@ export function createWebRouter(database) {
   }
 
   const fragment = (res, name, locals) =>
-    ejs.renderFile(view(name), { config, formatGo, ...locals }).then((html) => res.type("html").send(html));
+    ejs
+      .renderFile(view(name), { config, formatGo, base: basePath, ...locals })
+      .then((html) => res.type("html").send(html));
 
   function defaultBathDate(now) {
     const selectable = slots.selectableDates(now);
@@ -171,7 +181,7 @@ export function createWebRouter(database) {
 
   // --- 名前の選択 ---------------------------------------------------------
 
-  router.route("/").get((req, res) => res.redirect("/bath")).all(wrongMethod);
+  router.route("/").get((req, res) => res.redirect(u("/bath"))).all(wrongMethod);
 
   router
     .route("/select")
@@ -179,11 +189,11 @@ export function createWebRouter(database) {
     .post((req, res) => {
       const raw = String(req.body.member_id ?? "");
       if (!/^\d+$/.test(raw) || db.getMember(database, Number(raw)) === null) {
-        setNotice(res, "pick_name");
-        return res.redirect("/select");
+        flash(res, "pick_name");
+        return res.redirect(u("/select"));
       }
-      res.cookie(COOKIE, raw, { maxAge: COOKIE_MAX_AGE, sameSite: "lax", path: "/" });
-      return res.redirect("/bath");
+      res.cookie(COOKIE, raw, { maxAge: COOKIE_MAX_AGE, sameSite: "lax", path: cookiePath });
+      return res.redirect(u("/bath"));
     })
     .all(wrongMethod);
 
@@ -191,13 +201,13 @@ export function createWebRouter(database) {
 
   router.route("/bath").get((req, res) => {
     const member = currentMember(req);
-    if (member === null) return res.redirect("/select");
+    if (member === null) return res.redirect(u("/select"));
     const now = clock.now();
     const day = askedDate(req) ?? defaultBathDate(now);
     return page(req, res, "bath", {
       ...bathContext(day, now, member),
       tab: "bath",
-      fragment: `/fragment/bath?date=${day}`,
+      fragment: u(`/fragment/bath?date=${day}`),
     });
   }).all(wrongMethod);
 
@@ -209,7 +219,7 @@ export function createWebRouter(database) {
 
   router.route("/bath/reserve").post((req, res) => {
     const member = currentMember(req);
-    if (member === null) return res.redirect("/select");
+    if (member === null) return res.redirect(u("/select"));
     const now = clock.now();
     const day = askedDate(req);
     const section = String(req.body.section ?? "");
@@ -217,44 +227,44 @@ export function createWebRouter(database) {
     const slot = String(req.body.slot ?? "");
 
     if (day === null || !config.ROOMS.includes(room)) {
-      setNotice(res, "bad_slot");
-      return res.redirect("/bath");
+      flash(res, "bad_slot");
+      return res.redirect(u("/bath"));
     }
     const reason = slots.checkReservable(day, section, room, slot, now);
     if (reason !== "ok") {
-      setNotice(res, reason);
-      return res.redirect(`/bath?date=${day}`);
+      flash(res, reason);
+      return res.redirect(u(`/bath?date=${day}`));
     }
     const result = db.reserve(database, day, section, room, slot, member.id);
     if (result === "already_has") {
       const held = db.memberReservation(database, day, section, member.id);
-      setNotice(res, `already_has:${section}:${held.room}:${held.slot}`);
+      flash(res, `already_has:${section}:${held.room}:${held.slot}`);
     } else if (result === "slot_taken") {
-      setNotice(res, "slot_taken");
+      flash(res, "slot_taken");
     }
-    return res.redirect(`/bath?date=${day}`);
+    return res.redirect(u(`/bath?date=${day}`));
   }).all(wrongMethod);
 
   router.route("/bath/cancel").post((req, res) => {
     const member = currentMember(req);
-    if (member === null) return res.redirect("/select");
+    if (member === null) return res.redirect(u("/select"));
     const raw = String(req.body.reservation_id ?? "");
     const day = askedDate(req);
     if (/^\d+$/.test(raw) && !db.cancelReservation(database, Number(raw), member.id)) {
-      setNotice(res, "not_yours");
+      flash(res, "not_yours");
     }
-    return res.redirect(day === null ? "/bath" : `/bath?date=${day}`);
+    return res.redirect(u(day === null ? "/bath" : `/bath?date=${day}`));
   }).all(wrongMethod);
 
   // --- ごはん -------------------------------------------------------------
 
   router.route("/meals").get((req, res) => {
     const member = currentMember(req);
-    if (member === null) return res.redirect("/select");
+    if (member === null) return res.redirect(u("/select"));
     return page(req, res, "meals", {
       ...mealsContext(clock.now(), member),
       tab: "meals",
-      fragment: "/fragment/meals",
+      fragment: u("/fragment/meals"),
     });
   }).all(wrongMethod);
 
@@ -272,29 +282,29 @@ export function createWebRouter(database) {
 
   router.route("/meals/vote").post((req, res) => {
     const member = currentMember(req);
-    if (member === null) return res.redirect("/select");
+    if (member === null) return res.redirect(u("/select"));
     const meal = mealFromForm(req);
     const size = String(req.body.size ?? "");
     if (!config.RICE_SIZES.includes(size)) {
-      setNotice(res, "bad_slot");
+      flash(res, "bad_slot");
     } else if (meal === null || meals.voteState(meal, clock.now()) !== "open") {
-      setNotice(res, "closed");
+      flash(res, "closed");
     } else {
       db.vote(database, meal.day, meal.kind, member.id, size);
     }
-    return res.redirect("/meals");
+    return res.redirect(u("/meals"));
   }).all(wrongMethod);
 
   router.route("/meals/unvote").post((req, res) => {
     const member = currentMember(req);
-    if (member === null) return res.redirect("/select");
+    if (member === null) return res.redirect(u("/select"));
     const meal = mealFromForm(req);
     if (meal === null || meals.voteState(meal, clock.now()) !== "open") {
-      setNotice(res, "closed");
+      flash(res, "closed");
     } else {
       db.unvote(database, meal.day, meal.kind, member.id);
     }
-    return res.redirect("/meals");
+    return res.redirect(u("/meals"));
   }).all(wrongMethod);
 
   // --- 名簿 ---------------------------------------------------------------

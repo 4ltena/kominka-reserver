@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>風呂・ごはん</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="<%= base %>/static/style.css">
 </head>
 <body data-fragment="<%= fragment %>">
 
 <header>
   <nav class="tabs">
-    <a href="/bath" class="<%= tab === 'bath' ? 'on' : '' %>">風呂</a>
-    <a href="/meals" class="<%= tab === 'meals' ? 'on' : '' %>">ごはん</a>
+    <a href="<%= base %>/bath" class="<%= tab === 'bath' ? 'on' : '' %>">風呂</a>
+    <a href="<%= base %>/meals" class="<%= tab === 'meals' ? 'on' : '' %>">ごはん</a>
   </nav>
   <p class="who">
     <%= member ? member.name : '名前未選択' %>
-    <a href="/select">変更</a>
+    <a href="<%= base %>/select">変更</a>
   </p>
 </header>
 
@@ -25,7 +25,7 @@
 
 <main><%- body %></main>
 
-<footer><a href="/members">名簿</a></footer>
+<footer><a href="<%= base %>/members">名簿</a></footer>
 
 <script>
 (function () {

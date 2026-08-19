@@ -26,6 +26,11 @@
 
 `/api/v1/` に JSON で置いてある。認証は無い。締切や先着順の判定は画面と同じ規則で動く。日時はすべて `+09:00` 付きで返る。
 
+> **並走中の位置。** Pi では旧 Flask 版と新 Express 版が同じ 8080 を分け合っている。
+> Express 版は途中に `/ex` が入り、API は `http://<pi>:8080/ex/api/v1/...` になる。
+> 中身は下の表と同じ。Flask 版を落としたあと `/ex` は外れるので、**bot 側は接頭辞を
+> 設定で持たせておくとよい**。
+
 | | |
 | --- | --- |
 | `GET /api/v1/members` | 名簿 |
@@ -136,18 +141,42 @@ rice_votes        (id, date, meal, member_id, size, created_at)
 npm install
 npm start                      # http://127.0.0.1:8080/
 npm test
+BASE_PATH=/ex npm start        # http://127.0.0.1:8080/ex/
 ```
 
 名簿は画面から編集できない。`node roster.js list|add|hide|show <名前>` を使う。
 
-Raspberry Pi へ置くときは `PI_PASS='<パスワード>' ./deploy.sh`。転送から systemd への登録まで一度に行い、`data/` と `config.toml` は上書きしない。
+Raspberry Pi へ置くときは次の 2 つに分かれている。前者は 8080 に触れないので、
+いつ流しても動いているものは止まらない。
+
+| | |
+| --- | --- |
+| `PI_PASS='<パスワード>' ./deploy-express.sh` | Node を入れ、Express 版を別ポートに立てる |
+| `PI_PASS='<パスワード>' ./switch-front.sh` | 前段の nginx を置き、8080 を 2 つで分ける |
+
+`switch-front.sh` は Flask を 8081 へ動かすため、8080 に 1 秒から 2 秒の断絶がある。
+受け取りに失敗したら自動で Flask に 8080 を返す。手で戻すときは `--revert`。
+
+Flask 版の配置は `./deploy.sh`（旧）。
 
 ## 実装
 
 もとは Flask で書き、Raspberry Pi の実行環境を Node に寄せるため Express へ移した。
-移行の最中なので Python 版が `app/` と `tests/` に残っている。**Pi で動いているのは
-まだ Python 版**であり、切り替えは同じデータベースを見せて並走させたうえで行う。
-データベースのファイルもスキーマも URL も API の契約も変わらない。
+移行の最中なので Python 版が `app/` と `tests/` に残っている。データベースのファイルも
+スキーマも API の契約も変わらない。
+
+Pi では 2 つを並べて動かしている。**同じデータベースを両方が開いている**。SQLite は
+WAL なので複数のプロセスが同時に読み書きでき、片方で入れた予約はもう片方にも出る。
+
+```
+:8080/       → Flask 版    これまでどおり
+:8080/ex/    → Express 版  BASE_PATH=/ex で立てたもの
+```
+
+前段の nginx が接頭辞で振り分けている。Express 版は自分が `/ex` にぶら下がっている
+ことを知っていて、画面の中の行き先も転送先も cookie の適用範囲もすべて `/ex` の下に
+収まる。接頭辞を落とすと隣の Flask 版へ飛んでしまうため、生成した HTML に素の行き先が
+残っていないことをテストで確かめている。
 
 ```
 src/jst.js       日本標準時。夏時間が無いので +09:00 の固定オフセットとして扱う
@@ -175,5 +204,7 @@ src/web.js       画面
 | `DAY_CHANGE_HOUR` | 深夜を前夜として扱う境目（05:00） |
 | `VOTE_DEADLINE` | 食事ごとの締切 |
 | `RICE_GO` | 量から合数への換算 |
+
+`BASE_PATH` と `PORT` と `DB_PATH` は環境変数で渡す。
 
 設計は `docs/superpowers/specs/` にある。

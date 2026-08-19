@@ -1,6 +1,6 @@
 <nav class="days">
   <% for (const tab of tabs) { %>
-  <a href="/bath?date=<%= tab.value %>" class="<%= tab.current ? 'on' : '' %>"><%= tab.label %></a>
+  <a href="<%= base %>/bath?date=<%= tab.value %>" class="<%= tab.current ? 'on' : '' %>"><%= tab.label %></a>
   <% } %>
 </nav>
 <div id="live"><%- include("_bath_table") %></div>
