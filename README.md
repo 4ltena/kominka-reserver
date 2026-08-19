@@ -142,6 +142,26 @@ npm test
 
 Raspberry Pi へ置くときは `PI_PASS='<パスワード>' ./deploy.sh`。転送から systemd への登録まで一度に行い、`data/` と `config.toml` は上書きしない。
 
+## 通知 bot
+
+`bot/notify.js` が、予約した風呂の枠が始まる 5 分前に Slack の共有チャンネルで本人をメンションする。1 分ごとに `/api/v1/bath/<date>` を見に行くだけの独立したプロセスで、アプリには手を入れていない。API の契約が Flask 版と Express 版で同じなため、どちらが動いていても変更なしで働く。依存は増やさず Node 20 の `fetch` だけで動く。
+
+```sh
+SLACK_WEBHOOK_URL='https://hooks.slack.com/services/...' node bot/notify.js
+```
+
+| | |
+| --- | --- |
+| `SLACK_WEBHOOK_URL` | 必須。Slack アプリの Incoming Webhook で発行する。投稿先はここで固定される |
+| `API_BASE` | 既定 `http://127.0.0.1:8080` |
+| `bot/slack-users.json` | 名簿の名前 → Slack member ID。`slack-users.example.json` が見本。1 分ごとに読み直すので、動かしながら埋めてよい |
+| `bot/sent.json` | 送信済みの鍵。自動で作られる |
+
+メンションには member ID（`U01ABCD2EF`）が要る。表示名では通知が飛ばない。ID は Slack のプロフィール → その他 → 「メンバー ID をコピー」で取る。対応表に無い人は平文の名前で投稿する。名簿にいて対応表に無い人は起動時のログに出る。
+
+Pi では `bot/kominka-bot.service` を `kominka-reserver.service` と同じ手順で置く。`__USER__` と `__APP_DIR__` を置き換え、Webhook URL は `bot/webhook.env` に `SLACK_WEBHOOK_URL=...` の 1 行で置く。`deploy.sh` はまだ bot を転送しないため、手で送る。 配置から systemd への登録、確認と切り分けまでの手順は [docs/slack-bot-deploy.md](docs/slack-bot-deploy.md) にまとめてある。
+
+送信済みをファイルに残すのは、`Restart=always` で再起動したときに同じ枠へ投稿し続けるのを防ぐため。鍵は `date|room|slot|member_id` で、`reservation_id` は使わない。SQLite は削除された id を再利用するため、取り消しのあとに同じ id を得た予約へ通知が飛ばなくなる。
 ## 実装
 
 もとは Flask で書き、Raspberry Pi の実行環境を Node に寄せるため Express へ移した。
