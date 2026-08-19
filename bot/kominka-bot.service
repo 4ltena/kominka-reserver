@@ -1,0 +1,20 @@
+[Unit]
+Description=kominka-bot (風呂の5分前通知)
+# アプリが先に上がっていなくてよい。落ちていれば次の巡回で拾う。
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__APP_DIR__
+# 判定は epoch ミリ秒で行うため動作には効かない。ログを読みやすくするためだけ。
+Environment=TZ=Asia/Tokyo
+# Webhook URL はここに直接書かない。unit ファイルは誰でも読める。
+EnvironmentFile=__APP_DIR__/bot/webhook.env
+ExecStart=/usr/bin/node __APP_DIR__/bot/notify.js
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
