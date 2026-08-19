@@ -2,6 +2,26 @@
 
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) 形式に従い、バージョンは [セマンティックバージョニング](https://semver.org/lang/ja/) を採用する。
 
+## [3.0.0] — 2026-08-19
+
+Flask 版を落とし、Express 版だけにした。Raspberry Pi では 8080 の `/` を Express が
+直接受け持つ。前段に置いていた nginx も、接頭辞 `/ex` も要らなくなった。
+
+### 削除
+
+- `app/` と `tests/`、`run.py`、`roster.py`、`requirements.txt`。Python は使わない。
+- 移行のあいだ両版を突き合わせていた `tools/dump.py` と `tools/dump.mjs`、
+  `tools/api-differential.mjs`、`tools/serve-fixed.*`。片方が消えたので働かない。
+- 8080 を 2 つで分けていた `switch-front.sh`。
+
+### 変更
+
+- データベースを `/home/pi/kominka-reserver/data/kominka-reserver.db` へ移した。
+  WAL を本体に畳んでから動かし、前後で予約の件数が変わらないことを確かめている。
+- systemd の名前を `furo-gohan` から `kominka-reserver` に改めた。Cloudflare Tunnel の
+  unit も同様。**Quick Tunnel は起動のたびに宛先が変わるため、以前の URL は戻せない。**
+- `deploy.sh` が Express 版を置くものになった。`BASE_PATH` の既定は空。
+
 ## [2.1.0] — 2026-08-19
 
 ### 追加

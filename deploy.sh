@@ -1,128 +1,121 @@
 #!/usr/bin/env bash
-# Raspberry Pi へ配置する。何度流しても結果は変わらない。
-# data/ と config.toml は上書きしない。
+#
+# Raspberry Pi へ置く。
+#
+#   PI_PASS='<パスワード>' ./deploy.sh
+#
+# 転送から Node の導入、systemd への登録、起動確認までを一度に行う。
+# 何度流しても結果は変わらず、データベースは上書きしない。流す前に控えを取る。
+
 set -euo pipefail
 
-PI_HOST="${PI_HOST:-raspberrypi.local}"
+PI_HOST="${PI_HOST:-192.168.0.117}"
 PI_USER="${PI_USER:-pi}"
-# パスワードは既定値を持たない。環境変数で渡すか、鍵認証を使う。
-PI_PASS="${PI_PASS:-}"
-APP_DIR="${APP_DIR:-/home/${PI_USER}/kominka-reserver}"
-SERVICE=kominka-reserver
+EX_PORT="${EX_PORT:-8080}"
+BASE_PATH="${BASE_PATH:-}"
+APP_DIR="${APP_DIR:-/home/pi/kominka-reserver}"
+LIVE_DB="${LIVE_DB:-/home/pi/kominka-reserver/data/kominka-reserver.db}"
+UNIT="kominka-reserver"
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
-# 回線が不安定な環境でも切れにくいようにする。
-SSH_OPTS=(
-  -o StrictHostKeyChecking=accept-new
-  -o ConnectTimeout=30
-  -o ServerAliveInterval=5
-  -o ServerAliveCountMax=6
-  -o PreferredAuthentications=password
-  -o PubkeyAuthentication=no
-)
-
-if [ -z "$PI_PASS" ]; then
-  cat >&2 <<'USAGE'
-PI_PASS が空。次のいずれかで実行する。
-
-  PI_PASS='<Pi のパスワード>' ./deploy.sh
-  PI_HOST=192.168.0.10 PI_PASS='<パスワード>' ./deploy.sh
-
-鍵認証を設定済みなら sshpass は不要なので、この確認ごと外してよい。
-USAGE
+if [ -z "${PI_PASS:-}" ]; then
+  echo "PI_PASS が要る。使い方: PI_PASS='<パスワード>' $0" >&2
   exit 1
 fi
 
-if ! command -v sshpass >/dev/null 2>&1; then
-  echo "sshpass が要る。brew install hudochenkov/sshpass/sshpass" >&2
-  exit 1
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+          -o LogLevel=ERROR -o ConnectTimeout=30 -o ServerAliveInterval=5)
+
+ssh_pi() { sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "$PI_USER@$PI_HOST" "$@"; }
+
+# パスワードは stdin で渡す。引数に置くと ps に見えるため。
+ssh_pi_sudo_script() {
+  printf '%s' "$PI_PASS" |
+    sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "$PI_USER@$PI_HOST" \
+      "PI_PASS=\"\$(cat)\" EX_PORT='$EX_PORT' BASE_PATH='$BASE_PATH' APP_DIR='$APP_DIR' \
+       LIVE_DB='$LIVE_DB' UNIT='$UNIT' PI_USER='$PI_USER' bash /tmp/$UNIT-remote.sh"
+}
+
+echo "== 送る =="
+tar czf - package.json package-lock.json server.js roster.js src public |
+  sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "$PI_USER@$PI_HOST" \
+    "mkdir -p '$APP_DIR' && tar xzf - -C '$APP_DIR'"
+
+echo "== 手順を送る =="
+sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "$PI_USER@$PI_HOST" "cat > /tmp/$UNIT-remote.sh" <<'REMOTE'
+set -euo pipefail
+
+sudo_run() { printf '%s\n' "$PI_PASS" | sudo -S -p '' "$@"; }
+
+echo "-- データベースの控えを取る --"
+mkdir -p /home/pi/backup "$(dirname "$LIVE_DB")"
+if [ ! -f "$LIVE_DB" ]; then
+  echo "   初回。控えは取らない"
+else
+STAMP=$(date +%Y%m%d-%H%M%S)
+python3 - "$LIVE_DB" "/home/pi/backup/live-$STAMP.db" <<'PY'
+import sqlite3, sys
+# 書き込みの最中でも整合する控えを取る。cp では WAL の途中を掴むことがある。
+source = sqlite3.connect(sys.argv[1])
+target = sqlite3.connect(sys.argv[2])
+source.backup(target)
+target.close()
+source.close()
+PY
+echo "   /home/pi/backup/live-$STAMP.db  $(stat -c %s "/home/pi/backup/live-$STAMP.db") バイト"
 fi
 
-run() {
-  sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}" "$@"
-}
-
-run_sudo() {
-  run "echo '${PI_PASS}' | sudo -S -p '' sh -c '$*'"
-}
-
-# 不安定な回線で 1 回落ちても続けられるように、3 回まで試す。
-retry() {
-  local n=1
-  until "$@"; do
-    if [ "$n" -ge 3 ]; then
-      echo "3 回試して失敗した: $*" >&2
-      return 1
-    fi
-    n=$((n + 1))
-    echo "  再試行 ${n}/3"
-    sleep 3
-  done
-}
-
-echo "==> 接続確認 ${PI_USER}@${PI_HOST}"
-run true
-
-# 旧名 furo-gohan で配置済みなら引き継ぐ。データベースと設定は残す。
-# 全機で移行が済んだらこの節ごと消してよい。
-OLD_DIR="/home/${PI_USER}/furo-gohan"
-if run "test -d '${OLD_DIR}'"; then
-  echo "==> 旧名 furo-gohan からの移行"
-  run_sudo "systemctl disable --now furo-gohan 2>/dev/null || true"
-  run_sudo "rm -f /etc/systemd/system/furo-gohan.service"
-  run "mkdir -p '${APP_DIR}'"
-  run "test -d '${OLD_DIR}/data' && cp -a '${OLD_DIR}/data' '${APP_DIR}/' || true"
-  run "test -f '${OLD_DIR}/config.toml' && cp -a '${OLD_DIR}/config.toml' '${APP_DIR}/' || true"
-  run "test -f '${APP_DIR}/data/furo-gohan.db' && mv '${APP_DIR}/data/furo-gohan.db' '${APP_DIR}/data/kominka-reserver.db' || true"
-  for suffix in wal shm; do
-    run "test -f '${APP_DIR}/data/furo-gohan.db-${suffix}' && mv '${APP_DIR}/data/furo-gohan.db-${suffix}' '${APP_DIR}/data/kominka-reserver.db-${suffix}' || true"
-  done
-  run "mv '${OLD_DIR}' '${OLD_DIR}.bak'"
-  run_sudo "systemctl daemon-reload"
-  echo "    旧ディレクトリは ${OLD_DIR}.bak に残した"
+echo "-- Node --"
+if ! command -v node > /dev/null; then
+  sudo_run apt-get update -qq
+  sudo_run apt-get install -y -qq nodejs npm
 fi
+echo "   node $(node --version) / npm $(npm --version)"
 
-echo "==> ファイルの転送"
-run "mkdir -p '${APP_DIR}'"
-send() {
-  tar --exclude '__pycache__' -czf - -C "$HERE" \
-      app run.py roster.py requirements.txt config.example.toml kominka-reserver.service \
-    | sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "${PI_USER}@${PI_HOST}" \
-        "tar -xzf - -C '${APP_DIR}'"
-}
-retry send
+echo "-- 依存 --"
+cd "$APP_DIR"
+npm ci --omit=dev --no-audit --no-fund
+node -e "require('better-sqlite3'); console.log('   better-sqlite3 読み込み ok')"
 
-echo "==> 依存の導入"
-retry run_sudo "apt-get update -qq"
-retry run_sudo "apt-get install -y -qq python3-venv python3-pip curl"
-run "test -d '${APP_DIR}/.venv' || python3 -m venv '${APP_DIR}/.venv'"
-run "'${APP_DIR}/.venv/bin/pip' -q install --upgrade pip"
-retry run "'${APP_DIR}/.venv/bin/pip' -q install -r '${APP_DIR}/requirements.txt'"
+echo "-- unit --"
+cat > /tmp/$UNIT.service <<UNITFILE
+[Unit]
+Description=kominka-reserver (風呂・ごはん予約)
+After=network-online.target
+Wants=network-online.target
 
-echo "==> 設定とデータ (既存は残す)"
-run "mkdir -p '${APP_DIR}/data'"
-run "test -f '${APP_DIR}/config.toml' || cp '${APP_DIR}/config.example.toml' '${APP_DIR}/config.toml'"
+[Service]
+Type=simple
+User=$PI_USER
+WorkingDirectory=$APP_DIR
+Environment=TZ=Asia/Tokyo
+Environment=PORT=$EX_PORT
+Environment=HOST=0.0.0.0
+Environment=BASE_PATH=$BASE_PATH
+Environment=DB_PATH=$LIVE_DB
+ExecStart=/usr/bin/node $APP_DIR/server.js
+Restart=always
+RestartSec=3
 
-echo "==> 時刻帯を Asia/Tokyo に"
-run_sudo "timedatectl set-timezone Asia/Tokyo"
+[Install]
+WantedBy=multi-user.target
+UNITFILE
+sudo_run install -m 644 /tmp/$UNIT.service /etc/systemd/system/$UNIT.service
+rm -f /tmp/$UNIT.service
+sudo_run systemctl daemon-reload
+sudo_run systemctl enable --quiet $UNIT
+sudo_run systemctl restart $UNIT
 
-echo "==> systemd サービスの設置"
-run "sed -e 's|__USER__|${PI_USER}|g' -e 's|__APP_DIR__|${APP_DIR}|g' \
-      '${APP_DIR}/kominka-reserver.service' > /tmp/${SERVICE}.service"
-run_sudo "cp /tmp/${SERVICE}.service /etc/systemd/system/${SERVICE}.service"
-run_sudo "systemctl daemon-reload"
-run_sudo "systemctl enable ${SERVICE}"
-run_sudo "systemctl restart ${SERVICE}"
-
-echo "==> 応答の確認"
-for i in 1 2 3 4 5; do
-  if run "curl -fsS -o /dev/null http://localhost:8080/"; then
-    echo "配置完了  http://${PI_HOST}:8080/"
-    exit 0
-  fi
-  sleep 2
+echo "-- 確認 --"
+for attempt in $(seq 1 30); do
+  if curl -fsS -o /dev/null "http://127.0.0.1:$EX_PORT$BASE_PATH/api/v1/members"; then break; fi
+  sleep 1
 done
+curl -fsS "http://127.0.0.1:$EX_PORT$BASE_PATH/api/v1/members" | head -c 200; echo
+echo "   $(systemctl is-active $UNIT)"
+REMOTE
 
-echo "サービスが応答しない。次で調べる:" >&2
-echo "  sshpass -p '${PI_PASS}' ssh ${PI_USER}@${PI_HOST} 'journalctl -u ${SERVICE} -n 50 --no-pager'" >&2
-exit 1
+echo "== 進める =="
+ssh_pi_sudo_script
+
+echo
+echo "http://$PI_HOST:$EX_PORT$BASE_PATH/bath"

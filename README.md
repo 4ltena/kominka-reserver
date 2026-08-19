@@ -26,16 +26,6 @@
 
 `/api/v1/` に JSON で置いてある。認証は無い。締切や先着順の判定は画面と同じ規則で動く。日時はすべて `+09:00` 付きで返る。
 
-> **並走中の位置。** Pi では旧 Flask 版と新 Express 版が同じ 8080 を分け合っている。
-> **API を持っているのは Express 版だけ**なので、宛先は `/ex` を挟んだ次になる。
->
-> ```
-> http://192.168.0.117:8080/ex/api/v1/...
-> ```
->
-> 中身は下の表と同じ。Flask 版を落としたあと `/ex` は外れるため、**bot 側は接頭辞を
-> 設定で持たせておくとよい**。`/api/v1/...`（接頭辞なし）は旧 Flask 版に当たって 404 になる。
-
 | | |
 | --- | --- |
 | `GET /api/v1/members` | 名簿 |
@@ -151,37 +141,11 @@ BASE_PATH=/ex npm start        # http://127.0.0.1:8080/ex/
 
 名簿は画面から編集できない。`node roster.js list|add|hide|show <名前>` を使う。
 
-Raspberry Pi へ置くときは次の 2 つに分かれている。前者は 8080 に触れないので、
-いつ流しても動いているものは止まらない。
-
-| | |
-| --- | --- |
-| `PI_PASS='<パスワード>' ./deploy-express.sh` | Node を入れ、Express 版を別ポートに立てる |
-| `PI_PASS='<パスワード>' ./switch-front.sh` | 前段の nginx を置き、8080 を 2 つで分ける |
-
-`switch-front.sh` は Flask を 8081 へ動かすため、8080 に 1 秒から 2 秒の断絶がある。
-受け取りに失敗したら自動で Flask に 8080 を返す。手で戻すときは `--revert`。
-
-Flask 版の配置は `./deploy.sh`（旧）。
+Raspberry Pi へ置くときは `PI_PASS='<パスワード>' ./deploy.sh`。転送から Node の導入、
+systemd への登録、起動確認までを一度に行う。何度流しても結果は変わらず、データベースは
+上書きしない。流す前に控えを取る。
 
 ## 実装
-
-もとは Flask で書き、Raspberry Pi の実行環境を Node に寄せるため Express へ移した。
-移行の最中なので Python 版が `app/` と `tests/` に残っている。データベースのファイルも
-スキーマも API の契約も変わらない。
-
-Pi では 2 つを並べて動かしている。**同じデータベースを両方が開いている**。SQLite は
-WAL なので複数のプロセスが同時に読み書きでき、片方で入れた予約はもう片方にも出る。
-
-```
-:8080/       → Flask 版    これまでどおり
-:8080/ex/    → Express 版  BASE_PATH=/ex で立てたもの
-```
-
-前段の nginx が接頭辞で振り分けている。Express 版は自分が `/ex` にぶら下がっている
-ことを知っていて、画面の中の行き先も転送先も cookie の適用範囲もすべて `/ex` の下に
-収まる。接頭辞を落とすと隣の Flask 版へ飛んでしまうため、生成した HTML に素の行き先が
-残っていないことをテストで確かめている。
 
 ```
 src/jst.js       日本標準時。夏時間が無いので +09:00 の固定オフセットとして扱う
@@ -190,11 +154,12 @@ src/meals.js     食事と締切
 src/db.js        SQLite。先着順と 1 人 1 枠は一意制約が守る
 src/api.js       /api/v1
 src/web.js       画面
+src/views/       EJS
 ```
 
-移植が正しいことは、両方の版へ同じ入力を流して確かめている。`tools/dump.py` と
-`tools/dump.mjs` が純関数の出力を突き合わせ、`tools/api-differential.mjs` は
-2 つのサーバを同時に立てて応答そのものを比べる。
+もとは Flask で書き、Raspberry Pi の実行環境を Node に寄せるため Express へ移した。
+移行のあいだは同じデータベースを両方に開かせ、同じポートを接頭辞で分けて並走させた。
+`BASE_PATH` を渡すとその接頭辞の下にぶら下がる仕組みは残してある。
 
 ## 設定
 
@@ -210,6 +175,6 @@ src/web.js       画面
 | `VOTE_DEADLINE` | 食事ごとの締切 |
 | `RICE_GO` | 量から合数への換算 |
 
-`BASE_PATH` と `PORT` と `DB_PATH` は環境変数で渡す。
+`BASE_PATH` と `PORT` と `HOST` と `DB_PATH` は環境変数で渡す。
 
 設計は `docs/superpowers/specs/` にある。
