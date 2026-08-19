@@ -2,6 +2,36 @@
 
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) 形式に従い、バージョンは [セマンティックバージョニング](https://semver.org/lang/ja/) を採用する。
 
+## [3.1.0] — 2026-08-20
+
+### 追加
+
+- `bot/notify.js`。予約した風呂の枠が始まる 5 分前に、Slack の共有チャンネルで本人を
+  メンションする。1 分ごとに `/api/v1/bath/<date>` を見に行くだけの別プロセスで、
+  アプリには手を入れていない。依存は増やさず Node の `fetch` だけで動く。
+- 浴室ごとに投稿先を分けられる。Incoming Webhook は 1 本が 1 チャンネルに固定されるため、
+  `SLACK_WEBHOOK_URL_TUB` と `SLACK_WEBHOOK_URL_SHOWER` を分けて持つ。両方が無ければ
+  共通の `SLACK_WEBHOOK_URL` に落ちるので、1 チャンネルでの運用も壊れない。
+- 名簿の名前と Slack member ID の対応表 `bot/slack-users.json`。1 分ごとに読み直すため、
+  動かしながら埋めてよい。対応表に無い人は平文の名前で投稿する。名簿にいて対応表に無い
+  人は起動時のログに出る。秘密と個人の ID なので git には置かない。
+- `docs/slack-bot-deploy.md`。用意から常駐、切り分けまでの手順。
+
+### 変更
+
+- `deploy.sh` が bot も一緒に置き、`kominka-bot` として systemd へ登録する。送るのは
+  `notify.js` と unit と見本の 3 つだけで、Pi 側の `webhook.env` と `slack-users.json` は
+  触らない。URL が無いうちは unit を置くだけで起こさない。起こすと `Restart=always` が
+  3 秒ごとに起こし直す壊れ方に入るため。
+
+### 設計上の判断
+
+- 同じ枠へ 2 回送らない。1 分ごとに巡回する一方で通知の窓が 5 分あるため、同じ枠が 5 回
+  続けて条件を満たす。送信済みの鍵を `bot/sent.json` に持って弾く。`Restart=always` で
+  再起動しても記憶が残る。
+- 鍵は `date|room|slot|member_id` の 4 つ組で、`reservation_id` は使わない。SQLite は
+  削除された id を再利用するため、取り消しのあとに同じ id を得た予約へ通知が飛ばなくなる。
+
 ## [3.0.0] — 2026-08-19
 
 Flask 版を落とし、Express 版だけにした。Raspberry Pi では 8080 の `/` を Express が

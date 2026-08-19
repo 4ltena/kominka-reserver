@@ -16,6 +16,7 @@ BASE_PATH="${BASE_PATH:-}"
 APP_DIR="${APP_DIR:-/home/pi/kominka-reserver}"
 LIVE_DB="${LIVE_DB:-/home/pi/kominka-reserver/data/kominka-reserver.db}"
 UNIT="kominka-reserver"
+BOT_UNIT="kominka-bot"
 
 if [ -z "${PI_PASS:-}" ]; then
   echo "PI_PASS が要る。使い方: PI_PASS='<パスワード>' $0" >&2
@@ -32,11 +33,13 @@ ssh_pi_sudo_script() {
   printf '%s' "$PI_PASS" |
     sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "$PI_USER@$PI_HOST" \
       "PI_PASS=\"\$(cat)\" EX_PORT='$EX_PORT' BASE_PATH='$BASE_PATH' APP_DIR='$APP_DIR' \
-       LIVE_DB='$LIVE_DB' UNIT='$UNIT' PI_USER='$PI_USER' bash /tmp/$UNIT-remote.sh"
+       LIVE_DB='$LIVE_DB' UNIT='$UNIT' BOT_UNIT='$BOT_UNIT' PI_USER='$PI_USER' \
+       bash /tmp/$UNIT-remote.sh"
 }
 
 echo "== 送る =="
-tar czf - package.json package-lock.json server.js roster.js src public |
+tar czf - package.json package-lock.json server.js roster.js src public \
+    bot/notify.js bot/kominka-bot.service bot/slack-users.example.json |
   sshpass -p "$PI_PASS" ssh "${SSH_OPTS[@]}" "$PI_USER@$PI_HOST" \
     "mkdir -p '$APP_DIR' && tar xzf - -C '$APP_DIR'"
 
@@ -104,6 +107,22 @@ rm -f /tmp/$UNIT.service
 sudo_run systemctl daemon-reload
 sudo_run systemctl enable --quiet $UNIT
 sudo_run systemctl restart $UNIT
+
+echo "-- bot --"
+# Webhook URL と対応表は Pi 側にあるものを使う。転送していないので消えない。
+sed -e "s|__USER__|$PI_USER|g" -e "s|__APP_DIR__|$APP_DIR|g" \
+    "$APP_DIR/bot/$BOT_UNIT.service" > /tmp/$BOT_UNIT.service
+sudo_run install -m 644 /tmp/$BOT_UNIT.service /etc/systemd/system/$BOT_UNIT.service
+rm -f /tmp/$BOT_UNIT.service
+sudo_run systemctl daemon-reload
+if [ -f "$APP_DIR/bot/webhook.env" ]; then
+  sudo_run systemctl enable --quiet $BOT_UNIT
+  sudo_run systemctl restart $BOT_UNIT
+  echo "   $(systemctl is-active $BOT_UNIT)"
+else
+  # URL が無いまま起こすと notify.js が exit 1 し、Restart=always で回り続ける。
+  echo "   bot/webhook.env が無い。unit だけ置いて起こさない"
+fi
 
 echo "-- 確認 --"
 for attempt in $(seq 1 30); do

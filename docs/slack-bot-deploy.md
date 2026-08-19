@@ -3,22 +3,16 @@
 Raspberry Pi を管理している人向けの手順。風呂の枠が始まる 5 分前に、予約した本人を
 Slack でメンションする bot を常駐させる。
 
-アプリ本体（`app/` の Flask 版、`src/` の Express 版）には手を入れない。bot は
-`/api/v1/` を外から叩くだけの別プロセスで、どちらの版が動いていても働く。
+アプリ本体には手を入れない。bot は `/api/v1/` を外から呼ぶだけの別プロセスで、
+止めても予約と集計はそのまま動く。
 
 ## 前提
 
 | | |
 | --- | --- |
-| Node | **18 以上**。`fetch` を使うため。`node -v` で確認する |
+| Node | **18 以上**。`fetch` を使うため。アプリ本体が Node なので同じ機体なら入っている |
 | 依存 | 無し。`npm install` は不要 |
 | 通信 | アプリの API（既定 `http://127.0.0.1:8080`）と `hooks.slack.com` への外向き HTTPS |
-
-Node が入っていなければ入れる。Flask 版しか動かしていない機体には無い。
-
-```sh
-node -v || sudo apt-get install -y nodejs
-```
 
 ## 用意するもの
 
@@ -43,15 +37,15 @@ member ID は Slack のプロフィール → その他 → 「メンバー ID �
 
 ## 置く
 
-`deploy.sh` は bot を転送しない。手で送る。**Pi 側の `slack-users.json` と `webhook.env` を
-上書きしないよう、送るのは次の 3 ファイルだけにする。**
+`deploy.sh` がアプリと一緒に置く。送るのは `notify.js` と `kominka-bot.service` と
+`slack-users.example.json` の 3 つだけで、**Pi 側の `webhook.env` と `slack-users.json` は
+触らない。** 秘密と対応表は Pi にしか無い。
 
 ```sh
-scp bot/notify.js bot/kominka-bot.service bot/slack-users.example.json \
-    pi@raspberrypi.local:~/kominka-reserver/bot/
+PI_PASS='<パスワード>' ./deploy.sh
 ```
 
-Pi の上で設定を置く。
+初回は `webhook.env` がまだ無いため、unit を置くところで止まる。Pi の上で設定を書く。
 
 ```sh
 cd ~/kominka-reserver
@@ -62,6 +56,8 @@ EOT
 chmod 600 bot/webhook.env
 vi bot/slack-users.json          # 対応表を書く
 ```
+
+書き終えたら `deploy.sh` を流し直す。次からは bot も一緒に起動する。
 
 ## 常駐させる前に 1 回手で動かす
 
@@ -78,8 +74,12 @@ kominka-bot 起動  API=http://127.0.0.1:8080  送信済み=0件
 
 ## systemd に登録する
 
-`kominka-bot.service` は `kominka-reserver.service` と同じ書式で、`__USER__` と
-`__APP_DIR__` を置き換えてから置く。`deploy.sh` がアプリ側で行っているのと同じ手順。
+`deploy.sh` が行う。`bot/kominka-bot.service` の `__USER__` と `__APP_DIR__` を置き換えて
+`/etc/systemd/system/` へ入れ、`webhook.env` があれば `enable --now` する。URL が無いまま
+起こすと `notify.js` が終了コード 1 で落ち、`Restart=always` が 3 秒ごとに起こし直すため、
+無いうちは意図して起こさない。
+
+手で登録するなら次のとおり。
 
 ```sh
 APP_DIR=/home/pi/kominka-reserver

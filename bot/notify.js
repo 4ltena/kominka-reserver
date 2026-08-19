@@ -1,8 +1,8 @@
 /**
  * 風呂の枠が始まる 5 分前に、予約した本人を Slack でメンションする。
  *
- * アプリの外から /api/v1/ を叩く客として振る舞う。Pi へ配置されているのは Flask 版で
- * src/ が無いため、このファイルは単独で動くようにし、アプリのモジュールを import しない。
+ * アプリの外から /api/v1/ を呼ぶ客として振る舞い、アプリのモジュールを import しない。
+ * このファイルと対応表だけで動くため、別の機体へ置いて API_BASE を向けてもよい。
  *
  * 予約が入ったことをアプリから知らされる仕組みが無いので、1 分ごとに見に行く。窓が
  * 5 分あるため同じ枠が 5 回続けて条件を満たす。送信済みの鍵を持って弾く。
@@ -21,7 +21,8 @@ const API_BASE = process.env.API_BASE ?? "http://127.0.0.1:8080";
 const LEAD_MS = 5 * 60 * 1000;
 const TICK_MS = 60 * 1000;
 
-// 浴室の日本語名は API が返さないため、ここに持つ。src/config.js の ROOM_LABELS と同じ。
+// 浴室の日本語名は API が返さないため、ここに持つ。src/config.js の写しなので、
+// 食い違っていないことを test/notify.test.js が確かめる。
 export const ROOM_LABELS = { shower: "風呂", tub: "風呂（浴槽付き）" };
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
